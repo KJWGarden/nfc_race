@@ -1,0 +1,21 @@
+# anon-key check against gkngkikaegicvsursxjr.supabase.co at 2026-09-27T12:04:49.462Z (key value not recorded)
+PASS GET sessions -> HTTP 200 []
+PASS GET tags -> HTTP 200 []
+PASS GET teams -> HTTP 200 []
+PASS GET participants -> HTTP 200 []
+PASS GET tag_events -> HTTP 200 []
+PASS GET announcements -> HTTP 200 []
+FAIL POST sessions (insert) -> HTTP 201 
+FAIL PATCH sessions (update all) -> HTTP 204 
+FAIL DELETE tags (all) -> HTTP 204 
+FAIL RPC record_tag -> HTTP 200 {"ok": false, "error": "참가자를 찾을 수 없습니다."}
+FAIL RPC get_admin_live_data -> HTTP 200 null
+FAIL RPC get_team_race_data -> HTTP 200 null
+FAIL RPC create_team -> HTTP 200 {"ok": false, "error": "참가자를 찾을 수 없습니다."}
+FAIL RPC join_team -> HTTP 200 {"ok": false, "error": "참가자를 찾을 수 없습니다."}
+FAIL RPC create_announcement -> HTTP 200 null
+FAIL RPC create_tag -> HTTP 200 null
+FAIL RPC required_checkpoints -> HTTP 200 null
+PASS RPC notify_admin_change -> HTTP 404 {"code":"PGRST202","details":"Searched for the function public.notify_admin_change without parameters or with a single unnamed json/jsonb parameter, but no matc
+
+RESULT failures=11

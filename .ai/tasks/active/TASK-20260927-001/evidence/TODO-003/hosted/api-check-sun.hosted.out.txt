@@ -1,0 +1,52 @@
+target=hosted at 2026-09-27T12:34:27.053Z
+PASS bind T1 출발 uid
+PASS bind T2 중간 uid
+PASS bind T3 도착 uid
+PASS AC8 not live -> 400 not-live -- 400 "세션이 진행 중이 아닙니다. 관리자 시작을 기다려 주세요."
+PASS AC2 fresh SUN -> 200 ok -- 200 ok
+PASS AC2 same success shape (event, view, tag)
+PASS AC2 tag summary has only id,name,order,nextHint -- {"id":"PIPUTDBD","name":"T1 출발","order":1,"nextHint":"T1 출발 다음 안내"}
+PASS AC2 sun_counters row (U1,12) exists
+PASS AC3 replay by same participant -> 400 used -- 400 "이미 사용된 태그 URL입니다. 태그를 다시 찍어 주세요."
+PASS AC3 replay by teammate -> 400 used -- 400 "이미 사용된 태그 URL입니다. 태그를 다시 찍어 주세요."
+PASS AC3 replay by other team -> 400 used -- 400 "이미 사용된 태그 URL입니다. 태그를 다시 찍어 주세요."
+PASS AC3 URL consumed by a race-rule rejection cannot be retried -- 400 "이미 사용된 태그 URL입니다. 태그를 다시 찍어 주세요."
+PASS AC3 replays created no events
+PASS AC3 total events: +1 from AC2 only -- 1 -> 2
+PASS AC8 teammate fresh URL same checkpoint -> 이미 태깅한 지점입니다. (team credit) -- 400 "이미 태깅한 지점입니다."
+PASS AC8 out of order -> 순서가 아닙니다 (next T2) -- 400 "순서가 아닙니다. 다음 지점은 \"T2 중간\" 입니다."
+PASS AC8 team-level credit visible to teammate
+PASS AC6 counter == baseline -> baseline error -- 400 "기준 갱신 이전에 읽힌 태그 URL입니다. 태그를 다시 찍어 주세요."
+PASS AC6 counter < baseline -> baseline error -- 400 "기준 갱신 이전에 읽힌 태그 URL입니다. 태그를 다시 찍어 주세요."
+PASS AC6 bad MAC -> 유효하지 않은 태그입니다. -- 400 "유효하지 않은 태그입니다."
+PASS AC6 bad MAC consumed nothing
+PASS AC6 malformed e -> invalid -- 400 "유효하지 않은 태그입니다."
+PASS AC6 missing c -> invalid -- 400 "유효하지 않은 태그입니다."
+PASS AC6 UID not registered in session -> 등록되지 않은 NFC 태그입니다. -- 400 "등록되지 않은 NFC 태그입니다."
+PASS AC6 UID registered only in another session -> unregistered -- 400 "등록되지 않은 NFC 태그입니다."
+PASS AC6 registered tag without baseline -> baseline error -- 400 "기준 갱신 이전에 읽힌 태그 URL입니다. 태그를 다시 찍어 주세요."
+PASS AC3 counter used in session 1 is also dead in session 2 -- 400 "이미 사용된 태그 URL입니다. 태그를 다시 찍어 주세요."
+PASS AC6 after bad-MAC attempt the genuine URL still works -- 200 ok
+PASS AC4 concurrent different counters -> both 200 -- 200 ok / 200 ok
+PASS AC4 both teams advanced
+PASS AC5 20 concurrent identical -> exactly 1 accepted, 19 used -- ok=1 used=19 statuses=200,400,400,400,400,400,400,400,400,400,400,400,400,400,400,400,400,400,400,400
+PASS AC5 exactly one sun_counters row (U1,80)
+PASS AC5 exactly one event / one valid tag across the 20 teams -- events=1 valid=1
+PASS AC8 T2 in order -> ok -- 200 ok
+PASS AC8 T3 by teammate -> ok and finished -- 200 ok
+PASS AC8 after finish -> 이미 태깅한 지점입니다. -- 400 "이미 태깅한 지점입니다."
+PASS AC8 admin ranking: team A finished rank 1 -- {"rank":1,"progress":3}
+PASS AC8 team started_at/finished_at set
+PASS regression token path still works -> ok -- 200 ok
+PASS regression token response tag trimmed
+PASS AC7 no SUN key / master key / derived file key in any API response -- responses scanned=45
+PASS AC7 no key material in sun_counters/tags/tag_events rows -- bytes scanned=6381
+PASS AC7 sun_counters columns -- uid,ctr,used_at,participant_id
+PASS no participant cookie -> 401, nothing consumed -- 401 "참가 정보가 없습니다."
+PASS cleanup -- cleanup session LH3713MG: DELETE -> 200; rows (sessions,tags,teams,participants,tag_events,announcements) before=1,3,24,25,15,0 after=0,0,0,0,0,0; GET -> 404
+PASS cleanup -- cleanup session 2FP5D3HZ: DELETE -> 200; rows (sessions,tags,teams,participants,tag_events,announcements) before=1,1,1,1,2,0 after=0,0,0,0,0,0; GET -> 404
+PASS cleanup sun_counters 04C0FFEE000001 -- before=10 after=0
+PASS cleanup sun_counters 04C0FFEE000002 -- before=2 after=0
+PASS cleanup sun_counters 04C0FFEE000003 -- before=3 after=0
+PASS cleanup sun_counters 04C0FFEE000009 -- before=1 after=0
+RESULT failures=0

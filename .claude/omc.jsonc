@@ -1,0 +1,45 @@
+{
+    "team": {
+      "roleRouting": {
+        "orchestrator": {
+          "model": "inherit"
+        },
+  
+        "planner": {
+          "provider": "claude",
+          "model": "HIGH"
+        },
+  
+        "analyst": {
+          "provider": "claude",
+          "model": "HIGH"
+        },
+  
+        "architect": {
+          "provider": "claude",
+          "model": "HIGH"
+        },
+  
+        "executor": {
+          "provider": "claude",
+          "model": "MEDIUM"
+        },
+  
+        "critic": {
+          "provider": "codex"
+        },
+  
+        "code-reviewer": {
+          "provider": "codex"
+        },
+  
+        "security-reviewer": {
+          "provider": "codex"
+        },
+  
+        "test-engineer": {
+          "provider": "codex"
+        }
+      }
+    }
+  }

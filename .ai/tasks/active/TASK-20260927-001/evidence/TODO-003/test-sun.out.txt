@@ -1,0 +1,23 @@
+
+> nfc-walk-race@0.1.0 test:sun
+> node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test tests/sun.test.ts
+
+✔ AN12196 Table 2: PICCData decrypts to published UID and counter (0.676209ms)
+✔ AN12196 Table 4: session MAC key and SDMMAC (0.226792ms)
+✔ AN12196 Table 4: full payload verifies (0.246958ms)
+✔ AN12196 Table 1: session key from non-zero file key (0.066708ms)
+✔ AN12196 Table 5: multi-block MAC input (0.081917ms)
+✔ tampered MAC byte is rejected (0.083541ms)
+✔ wrong meta key cannot decrypt PICCData (0.049917ms)
+✔ wrong file key fails the MAC (0.072209ms)
+✔ malformed parameters are rejected before crypto (0.065958ms)
+✔ file key diversification is stable and UID-specific (0.124208ms)
+✔ generated payload round-trips with diversified key; counter boundaries (0.724916ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 65.167792

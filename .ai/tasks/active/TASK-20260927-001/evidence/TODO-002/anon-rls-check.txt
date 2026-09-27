@@ -1,0 +1,60 @@
+# AC4 anon RLS check  2026-09-27T11:42:18Z  API=http://127.0.0.1:55421
+## key: ANON_KEY (value not recorded)
+GET /rest/v1/sessions?select=*  -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table sessions"} [HTTP 401]
+GET /rest/v1/tags?select=*  -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table tags"} [HTTP 401]
+GET /rest/v1/teams?select=*  -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table teams"} [HTTP 401]
+GET /rest/v1/participants?select=*  -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table participants"} [HTTP 401]
+GET /rest/v1/tag_events?select=*  -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table tag_events"} [HTTP 401]
+GET /rest/v1/announcements?select=*  -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table announcements"} [HTTP 401]
+POST /rest/v1/sessions (insert) -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table sessions"} [HTTP 401]
+PATCH /rest/v1/sessions (update) -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table sessions"} [HTTP 401]
+DELETE /rest/v1/tags -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table tags"} [HTTP 401]
+POST /rest/v1/rpc/record_tag -> {"code":"42501","details":null,"hint":null,"message":"permission denied for function record_tag"} [HTTP 401]
+POST /rest/v1/rpc/get_admin_live_data -> {"code":"42501","details":null,"hint":null,"message":"permission denied for function get_admin_live_data"} [HTTP 401]
+POST /rest/v1/rpc/get_team_race_data -> {"code":"42501","details":null,"hint":null,"message":"permission denied for function get_team_race_data"} [HTTP 401]
+POST /rest/v1/rpc/create_team -> {"code":"42501","details":null,"hint":null,"message":"permission denied for function create_team"} [HTTP 401]
+POST /rest/v1/rpc/join_team -> {"code":"42501","details":null,"hint":null,"message":"permission denied for function join_team"} [HTTP 401]
+POST /rest/v1/rpc/create_announcement -> {"code":"42501","details":null,"hint":null,"message":"permission denied for function create_announcement"} [HTTP 401]
+POST /rest/v1/rpc/create_tag -> {"code":"42501","details":null,"hint":null,"message":"permission denied for function create_tag"} [HTTP 401]
+POST /rest/v1/rpc/required_checkpoints -> {"code":"42501","details":null,"hint":null,"message":"permission denied for function required_checkpoints"} [HTTP 401]
+## key: PUBLISHABLE_KEY (value not recorded)
+GET /rest/v1/sessions?select=*  -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table sessions"} [HTTP 401]
+GET /rest/v1/tags?select=*  -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table tags"} [HTTP 401]
+GET /rest/v1/teams?select=*  -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table teams"} [HTTP 401]
+GET /rest/v1/participants?select=*  -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table participants"} [HTTP 401]
+GET /rest/v1/tag_events?select=*  -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table tag_events"} [HTTP 401]
+GET /rest/v1/announcements?select=*  -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table announcements"} [HTTP 401]
+POST /rest/v1/sessions (insert) -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table sessions"} [HTTP 401]
+PATCH /rest/v1/sessions (update) -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table sessions"} [HTTP 401]
+DELETE /rest/v1/tags -> {"code":"42501","details":null,"hint":null,"message":"permission denied for table tags"} [HTTP 401]
+POST /rest/v1/rpc/record_tag -> {"code":"42501","details":null,"hint":null,"message":"permission denied for function record_tag"} [HTTP 401]
+POST /rest/v1/rpc/get_admin_live_data -> {"code":"42501","details":null,"hint":null,"message":"permission denied for function get_admin_live_data"} [HTTP 401]
+POST /rest/v1/rpc/get_team_race_data -> {"code":"42501","details":null,"hint":null,"message":"permission denied for function get_team_race_data"} [HTTP 401]
+POST /rest/v1/rpc/create_team -> {"code":"42501","details":null,"hint":null,"message":"permission denied for function create_team"} [HTTP 401]
+POST /rest/v1/rpc/join_team -> {"code":"42501","details":null,"hint":null,"message":"permission denied for function join_team"} [HTTP 401]
+POST /rest/v1/rpc/create_announcement -> {"code":"42501","details":null,"hint":null,"message":"permission denied for function create_announcement"} [HTTP 401]
+POST /rest/v1/rpc/create_tag -> {"code":"42501","details":null,"hint":null,"message":"permission denied for function create_tag"} [HTTP 401]
+POST /rest/v1/rpc/required_checkpoints -> {"code":"42501","details":null,"hint":null,"message":"permission denied for function required_checkpoints"} [HTTP 401]
+## DB state after attempts (psql as postgres): expect sessions=1 status=ready, tags=4, announcements=0
+sessions|1|ready
+tags|4|
+announcements|0|
+## RLS flags and policy count
+announcements|t
+participants|t
+sessions|t
+tag_events|t
+tags|t
+teams|t
+policies_in_public|0
+## anon/authenticated table privileges in public (expect none)
+## function EXECUTE for anon (expect all f)
+create_announcement|f
+create_tag|f
+create_team|f
+get_admin_live_data|f
+get_team_race_data|f
+join_team|f
+notify_admin_change|f
+record_tag|f
+required_checkpoints|f

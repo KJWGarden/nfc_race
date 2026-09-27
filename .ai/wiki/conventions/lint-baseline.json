@@ -1,0 +1,42 @@
+[
+  {
+    "key": "src/app/admin/page.tsx\terror\treact-hooks/set-state-in-effect\tError: Calling setState synchronously within an effect can trigger cascading renders",
+    "count": 1
+  },
+  {
+    "key": "src/app/admin/sessions/[id]/ceremony/page.tsx\terror\treact-hooks/set-state-in-effect\tError: Calling setState synchronously within an effect can trigger cascading renders",
+    "count": 1
+  },
+  {
+    "key": "src/app/admin/sessions/[id]/ui.tsx\terror\treact-hooks/set-state-in-effect\tError: Calling setState synchronously within an effect can trigger cascading renders",
+    "count": 1
+  },
+  {
+    "key": "src/app/api/events/route.ts\twarning\t@typescript-eslint/no-unused-vars\t'jsonOk' is defined but never used.",
+    "count": 1
+  },
+  {
+    "key": "src/app/layout.tsx\twarning\t@next/next/no-page-custom-font\tCustom fonts not added in `pages/_document.js` will only load for a single page. This is discouraged. See: https://nextjs.org/docs/messages/no-page-custom-font",
+    "count": 1
+  },
+  {
+    "key": "src/app/race/page.tsx\terror\treact-hooks/purity\tError: Cannot call impure function during render",
+    "count": 1
+  },
+  {
+    "key": "src/app/race/page.tsx\terror\treact-hooks/set-state-in-effect\tError: Calling setState synchronously within an effect can trigger cascading renders",
+    "count": 2
+  },
+  {
+    "key": "src/app/race/page.tsx\twarning\treact-hooks/exhaustive-deps\tReact Hook useEffect has a missing dependency: 'submitTag'. Either include it or remove the dependency array.",
+    "count": 1
+  },
+  {
+    "key": "src/components/qr-image.tsx\twarning\t@next/next/no-img-element\tUsing `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+    "count": 1
+  },
+  {
+    "key": "src/lib/use-realtime.ts\terror\treact-hooks/refs\tError: Cannot access refs during render",
+    "count": 1
+  }
+]

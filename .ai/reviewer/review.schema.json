@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "mode",
+    "task_id",
+    "todo_id",
+    "summary",
+    "blockers",
+    "warnings",
+    "evidence",
+    "regressions_checked"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "APPROVED",
+        "CHANGES_REQUIRED",
+        "PLAN_REVISION_REQUIRED",
+        "NEEDS_USER_DECISION"
+      ]
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "PLAN_REVIEW",
+        "ANALYSIS_REVIEW",
+        "IMPLEMENTATION_REVIEW",
+        "FINAL_REVIEW"
+      ]
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "todo_id": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "target",
+          "problem",
+          "evidence",
+          "required_change"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "required_change": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "regressions_checked": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

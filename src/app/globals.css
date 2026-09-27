@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-ink: #12160f;
+  --color-ink-2: #1b2316;
+  --color-ink-3: #2c3826;
+  --color-paper: #f3eee3;
+  --color-paper-2: #e6ddcc;
+  --color-lime: #d4f25c;
+  --color-terra: #ff5a1f;
+  --color-moss: #3f6d50;
+  --color-gold: #e4b429;
+  --font-sans: "Pretendard", "Noto Sans KR", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Black Han Sans", "Pretendard", sans-serif;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+}
+
+.stamp {
+  border: 2px dashed color-mix(in oklab, var(--color-ink) 35%, transparent);
+}
+
+.route-dash {
+  background-image: repeating-linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--color-ink) 28%, transparent) 0 8px,
+    transparent 8px 16px
+  );
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes stamp-in {
+  0% {
+    opacity: 0;
+    transform: scale(1.4) rotate(-8deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-2deg);
+  }
+}
+
+.animate-rise {
+  animation: rise 0.45s ease both;
+}
+
+.animate-stamp {
+  animation: stamp-in 0.5s cubic-bezier(0.2, 1.4, 0.3, 1) both;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-toast {
+  animation: toast-in 0.35s ease both;
+}

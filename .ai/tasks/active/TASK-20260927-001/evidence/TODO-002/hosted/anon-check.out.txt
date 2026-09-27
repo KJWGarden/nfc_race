@@ -1,0 +1,21 @@
+# anon-key check against gkngkikaegicvsursxjr.supabase.co at 2026-09-27T12:10:34.537Z (key value not recorded)
+PASS GET sessions -> HTTP 401 {"code":"42501","details":null,"hint":"Grant the required privileges to the current role with: GRANT SELECT ON public.sessions TO anon;","message":"permission d
+PASS GET tags -> HTTP 401 {"code":"42501","details":null,"hint":"Grant the required privileges to the current role with: GRANT SELECT ON public.tags TO anon;","message":"permission denie
+PASS GET teams -> HTTP 401 {"code":"42501","details":null,"hint":"Grant the required privileges to the current role with: GRANT SELECT ON public.teams TO anon;","message":"permission deni
+PASS GET participants -> HTTP 401 {"code":"42501","details":null,"hint":"Grant the required privileges to the current role with: GRANT SELECT ON public.participants TO anon;","message":"permissi
+PASS GET tag_events -> HTTP 401 {"code":"42501","details":null,"hint":"Grant the required privileges to the current role with: GRANT SELECT ON public.tag_events TO anon;","message":"permission
+PASS GET announcements -> HTTP 401 {"code":"42501","details":null,"hint":"Grant the required privileges to the current role with: GRANT SELECT ON public.announcements TO anon;","message":"permiss
+PASS POST sessions (insert) -> HTTP 401 {"code":"42501","details":null,"hint":"Grant the required privileges to the current role with: GRANT INSERT ON public.sessions TO anon;","message":"permission d
+PASS PATCH sessions (update all) -> HTTP 401 {"code":"42501","details":null,"hint":"Grant the required privileges to the current role with: GRANT SELECT, UPDATE ON public.sessions TO anon;","message":"perm
+PASS DELETE tags (all) -> HTTP 401 {"code":"42501","details":null,"hint":"Grant the required privileges to the current role with: GRANT SELECT, DELETE ON public.tags TO anon;","message":"permissi
+PASS RPC record_tag -> HTTP 401 {"code":"42501","details":null,"hint":null,"message":"permission denied for function record_tag"}
+PASS RPC get_admin_live_data -> HTTP 401 {"code":"42501","details":null,"hint":null,"message":"permission denied for function get_admin_live_data"}
+PASS RPC get_team_race_data -> HTTP 401 {"code":"42501","details":null,"hint":null,"message":"permission denied for function get_team_race_data"}
+PASS RPC create_team -> HTTP 401 {"code":"42501","details":null,"hint":null,"message":"permission denied for function create_team"}
+PASS RPC join_team -> HTTP 401 {"code":"42501","details":null,"hint":null,"message":"permission denied for function join_team"}
+PASS RPC create_announcement -> HTTP 401 {"code":"42501","details":null,"hint":null,"message":"permission denied for function create_announcement"}
+PASS RPC create_tag -> HTTP 401 {"code":"42501","details":null,"hint":null,"message":"permission denied for function create_tag"}
+PASS RPC required_checkpoints -> HTTP 401 {"code":"42501","details":null,"hint":null,"message":"permission denied for function required_checkpoints"}
+PASS RPC notify_admin_change -> HTTP 404 {"code":"PGRST202","details":"Searched for the function public.notify_admin_change without parameters or with a single unnamed json/jsonb parameter, but no matc
+
+RESULT failures=0

@@ -1,0 +1,43 @@
+NOTE test session 07IWG7OI code 1FB2EK ([TEST] TODO-002 browser 2026-09-27T12:11:48.721Z)
+PASS admin session page loaded (81 ms)
+PASS admin page joined private channel realtime:cp-admin:07IWG7OI (phx_reply ok)
+PASS admin Realtime websocket -> wss://gkngkikaegicvsursxjr.supabase.co/realtime/v1/websocket?apikey=<redacted>&vsn=2.0.0
+PASS admin page has exactly one active subscription under React Strict Mode (per socket: [{"index":0,"joins":1,"leaves":0,"replies":["ok"],"closed":false}])
+PASS ceremony page loaded (no finishers yet) (209 ms)
+PASS ceremony page joined private channel
+PASS realtime token route responses: [200,200,200,200]
+PASS AC4 admin 참가자 stat -> 1명 after participant join without reload (1286 ms after click; t=1307)
+PASS AC4 admin live panel shows new team 실시간팀 without reload (783 ms)
+PASS AC4 admin 팀 stat -> 1팀 (1 ms)
+PASS AC4 admin 참가자 stat -> 2명 after second join (782 ms)
+PASS AC4 admin live panel shows team with 2 members after team join (1287 ms)
+PASS A tags T1 -> 200
+PASS AC4 admin live panel progress 1/4 after tag (788 ms)
+PASS AC4 admin 진행중 stat -> 1팀 (2 ms)
+PASS AC2 B (/race, no reload) shows 1/4 via polling 8628 ms after A's tag (budget 12500 ms)
+NOTE B /api/me request gaps while visible (ms): [0,853,9155]
+PASS AC2 A shows 새 공지 toast (6836 ms after post)
+PASS AC2 B shows 새 공지 toast (9666 ms after post; budget 13000 ms)
+PASS toast carries the new announcement message
+PASS AC3 no /api/me requests from B while hidden for 21001 ms (count=0)
+PASS AC3 immediate /api/me on becoming visible (2 ms)
+PASS AC3 polling resumed: next /api/me 10004 ms after visible
+PASS regression: B out-of-order T3 -> 400
+PASS regression: out-of-order message shown (3 ms)
+PASS regression: B duplicate T1 (tagged by A) -> 400
+PASS regression: duplicate message shown (4 ms)
+PASS B tags T2 -> 200
+PASS B tags T3 -> 200
+PASS B tags T4 -> 200 (finish)
+PASS B sees 완주! overlay (4 ms)
+PASS AC4 admin 완주 stat -> 1팀 without reload (1 ms)
+PASS AC4 ceremony shows "1등 공개" after team finishes, without reload (828 ms after finish)
+PASS AC2 A (no reload) shows 기록 확정 via polling (3641 ms after finish)
+PASS admin page never reloaded during participant actions (main-frame navigations since start: 0)
+PASS AC7 channel left after navigating away (phx_leave=1)
+PASS AC7 exactly one active subscription after returning (per socket: [{"index":0,"joins":2,"leaves":1,"replies":["ok","ok"],"closed":false}])
+PASS AC7 one DB change -> exactly one admin refetch (got 1; catch-up refetches after rejoin: 1)
+NOTE admin realtime sockets [{"index":0,"joins":2,"leaves":1,"replies":["ok","ok","ok"],"closed":false}]; ceremony realtime sockets [{"index":0,"joins":1,"leaves":0,"replies":["ok"],"closed":false}]
+PASS cleanup session 07IWG7OI: DELETE -> 200; rows (sessions,tags,teams,participants,tag_events,announcements) before=1,4,1,2,6,2 after=0,0,0,0,0,0; GET -> 404
+
+RESULT failures=0

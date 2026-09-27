@@ -1,0 +1,6 @@
+PASS missing SUN env -> 503 -- 503 {"ok":false,"error":"서버 설정 오류입니다. 관리자에게 문의해 주세요."}
+PASS error does not name the variable
+PASS nothing consumed
+PASS token path unaffected by missing SUN env (reaches race rules) -- 400 세션이 진행 중이 아닙니다. 관리자 시작을 기다려 주세요.
+PASS cleanup -- cleanup session FZIIXSED: DELETE -> 200; rows (sessions,tags,teams,participants,tag_events,announcements) before=1,1,1,1,1,0 after=0,0,0,0,0,0; GET -> 404
+RESULT failures=0

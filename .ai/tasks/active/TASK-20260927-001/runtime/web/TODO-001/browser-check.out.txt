@@ -1,0 +1,37 @@
+PASS admin login -> /admin
+PASS admin list shows seeded DEMO01 session
+PASS created session page opens
+PASS POST tag "임시 지점 1" -> 200
+PASS checkpoint "임시 지점 1" listed
+PASS POST tag "임시 지점 2" -> 200
+PASS checkpoint "임시 지점 2" listed
+PASS second checkpoint has order 2
+PASS throwaway session is live (레이스 종료 button shown)
+PASS back on session list after delete
+PASS deleted session no longer listed
+PASS GET deleted session API -> 404
+PASS DEMO01 set live
+PASS A joined DEMO01 -> team gate
+PASS A created team, race view shows join code
+PASS team join code read from page: UADK
+PASS B joined team by code; members list shows 브라우저A
+PASS B sees next destination 여의도 출발 게이트
+PASS B manual demo000003 -> HTTP 400
+PASS out-of-order error shown
+PASS A manual demo000001 -> HTTP 200
+PASS A sees checkpoint 1 overlay
+PASS B manual demo000001 (already tagged by teammate) -> HTTP 400
+PASS duplicate error shown to teammate B
+PASS B manual full URL /t/demo000002 -> HTTP 200
+PASS B sees checkpoint 2 overlay
+PASS A manual demo000003 -> HTTP 200
+PASS A sees checkpoint 3 overlay
+PASS A manual demo000004 -> HTTP 200
+PASS A sees finish overlay
+PASS A race view shows 기록 확정 (finished)
+PASS B (teammate) race view shows 기록 확정 after reload
+PASS admin live tab shows team after reload
+PASS admin shows 완주 stat
+PASS ranking row: rank 1, finished (row text: 1브라우저팀브라우저A, 브라우저B4/4오후 08:29:57오후 08:30:0000:02)
+
+RESULT failures=0

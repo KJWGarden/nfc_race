@@ -1,0 +1,22 @@
+PASS GET /api/admin/realtime-token without cookie -> 401 :: 401 {"ok":false,"error":"관리자 권한이 필요합니다."}
+PASS GET token with forged cp_admin cookie -> 401 :: 401
+test session VPYOCL3J ([TEST] TODO-002 realtime security 2026-09-27T12:10:44.191Z)
+PASS GET token with admin cookie -> 200, no-store, claims {role:authenticated, cp_role:admin, ttl 3600} :: {"status":200,"cacheControl":"no-store","claims":{"role":"authenticated","aud":"authenticated","sub":"checkpoint-admin","cp_role":"admin","iat":"<n>","exp":"<n+3600>"}}
+PASS private join denied: anon key only, private channel :: CHANNEL_ERROR Unauthorized: You do not have permissions to read from this Channel topic: cp-admin:VPYOCL3J
+PASS private join denied: forged admin JWT (wrong secret) :: CHANNEL_ERROR JwtSignatureError: Failed to validate JWT signature
+PASS private join denied: valid-signature authenticated JWT without cp_role :: CHANNEL_ERROR Unauthorized: You do not have permissions to read from this Channel topic: cp-admin:VPYOCL3J
+PASS private join denied: expired admin JWT :: CHANNEL_ERROR InvalidJWTToken: Token has expired 3618 seconds ago
+PASS HOSTED HS256: app-minted admin token joins private cp-admin channel :: SUBSCRIBED 
+anon public-channel join on "cp-admin:VPYOCL3J": SUBSCRIBED
+PASS admin receives change signals for admin-API update + announcement :: 2
+PASS signal payload carries only {type, sessionId} (+ Realtime message uuid id; no row data) :: [{"id":"ab29e006-e99d-43c5-a222-98ecac741d82","type":"sessions","sessionId":"VPYOCL3J"},{"id":"a324b195-8ef6-42ae-a174-3e0b02c0b603","type":"announcements","sessionId":"VPYOCL3J"}]
+PASS anon PUBLIC channel with same topic received nothing :: 0 messages
+PASS denied client received nothing: anon key only, private channel :: 0 messages
+PASS denied client received nothing: forged admin JWT (wrong secret) :: 0 messages
+PASS denied client received nothing: valid-signature authenticated JWT without cp_role :: 0 messages
+PASS denied client received nothing: expired admin JWT :: 0 messages
+PASS second admin receiver joins :: SUBSCRIBED
+PASS client broadcasts (anon public, admin private) are not delivered; only DB signals arrive :: receiver1 ["sessions"], receiver2 ["sessions"] (admin send() result: ok)
+PASS cleanup session VPYOCL3J: DELETE -> 200; rows (sessions,tags,teams,participants,tag_events,announcements) before=1,1,0,0,0,1 after=0,0,0,0,0,0; GET -> 404
+
+RESULT failures=0

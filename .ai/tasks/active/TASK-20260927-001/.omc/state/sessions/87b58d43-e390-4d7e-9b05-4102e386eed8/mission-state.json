@@ -1,0 +1,97 @@
+{
+  "updatedAt": "2026-09-27T11:34:13.453Z",
+  "missions": [
+    {
+      "id": "session:87b58d43-e390-4d7e-9b05-4102e386eed8:none",
+      "source": "session",
+      "name": "none",
+      "objective": "Session mission",
+      "createdAt": "2026-09-27T10:47:57.790Z",
+      "updatedAt": "2026-09-27T11:34:13.453Z",
+      "status": "done",
+      "workerCount": 3,
+      "taskCounts": {
+        "total": 3,
+        "pending": 0,
+        "blocked": 0,
+        "inProgress": 0,
+        "completed": 3,
+        "failed": 0
+      },
+      "agents": [
+        {
+          "name": "planner:a8d8060",
+          "role": "planner",
+          "ownership": "a8d8060ba79bda063",
+          "status": "done",
+          "currentStep": null,
+          "latestUpdate": "completed",
+          "completedSummary": null,
+          "updatedAt": "2026-09-27T11:34:11.269Z"
+        },
+        {
+          "name": "general-purpose:a0f0975",
+          "role": "general-purpose",
+          "ownership": "a0f0975d1a0e5f4a7",
+          "status": "done",
+          "currentStep": null,
+          "latestUpdate": "completed",
+          "completedSummary": null,
+          "updatedAt": "2026-09-27T11:09:48.612Z"
+        },
+        {
+          "name": "impl-todo001:aimpl-t",
+          "role": "impl-todo001",
+          "ownership": "aimpl-todo001-54c22cbdebb830d1",
+          "status": "done",
+          "currentStep": null,
+          "latestUpdate": "completed",
+          "completedSummary": null,
+          "updatedAt": "2026-09-27T11:34:13.453Z"
+        }
+      ],
+      "timeline": [
+        {
+          "id": "session-stop:a8379319dd035a50e:2026-09-27T11:33:44.581Z",
+          "at": "2026-09-27T11:33:44.581Z",
+          "kind": "completion",
+          "agent": "planner:a8d8060",
+          "detail": "completed",
+          "sourceKey": "session-stop:a8379319dd035a50e"
+        },
+        {
+          "id": "session-stop:aimpl-todo001-54c22cbdebb830d1:2026-09-27T11:33:48.907Z",
+          "at": "2026-09-27T11:33:48.907Z",
+          "kind": "completion",
+          "agent": "impl-todo001:aimpl-t",
+          "detail": "completed",
+          "sourceKey": "session-stop:aimpl-todo001-54c22cbdebb830d1"
+        },
+        {
+          "id": "session-start:aimpl-todo001-54c22cbdebb830d1:2026-09-27T11:34:03.572Z",
+          "at": "2026-09-27T11:34:03.572Z",
+          "kind": "update",
+          "agent": "impl-todo001:aimpl-t",
+          "detail": "started impl-todo001:aimpl-t",
+          "sourceKey": "session-start:aimpl-todo001-54c22cbdebb830d1"
+        },
+        {
+          "id": "session-stop:aa22c256ad5166d3a:2026-09-27T11:34:11.269Z",
+          "at": "2026-09-27T11:34:11.269Z",
+          "kind": "completion",
+          "agent": "planner:a8d8060",
+          "detail": "completed",
+          "sourceKey": "session-stop:aa22c256ad5166d3a"
+        },
+        {
+          "id": "session-stop:aimpl-todo001-54c22cbdebb830d1:2026-09-27T11:34:13.453Z",
+          "at": "2026-09-27T11:34:13.453Z",
+          "kind": "completion",
+          "agent": "impl-todo001:aimpl-t",
+          "detail": "completed",
+          "sourceKey": "session-stop:aimpl-todo001-54c22cbdebb830d1"
+        }
+      ]
+    }
+  ]
+}

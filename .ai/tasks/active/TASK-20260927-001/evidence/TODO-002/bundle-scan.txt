@@ -1,0 +1,8 @@
+# bundle scan 2026-09-27T12:13:39Z after npm run build (values not recorded)
+files scanned under .next: 922
+service_role key value hits in .next: 0
+JWT secret value hits in .next: 0
+service_role key value hits in .next/static: 0
+JWT secret value hits in .next/static: 0
+expected public (anon) key hits in .next/static (inlined NEXT_PUBLIC, informational): 1
+strings SUPABASE_SERVICE_ROLE_KEY|SUPABASE_JWT_SECRET|realtime-jwt in .next/static: 0

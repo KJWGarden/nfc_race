@@ -1,0 +1,13 @@
+# Incident: NEXT_PUBLIC_SUPABASE_ANON_KEY holds the service_role key (hosted run 1, 2026-09-27 ~21:04 KST)
+
+- anon-check-hosted.mjs run 1 (anon-check-run1-wrong-key.out.txt): writes and RPCs with the "public" key succeeded (POST 201, PATCH 204, DELETE 204, RPC 200).
+- Cause (decoded JWT claims only, values not recorded): NEXT_PUBLIC_SUPABASE_ANON_KEY role=service_role, ref=gkngkikaegicvsursxjr; SUPABASE_SERVICE_ROLE_KEY role=service_role (same key role). Not a migration/RLS defect: RLS/grants apply to anon/authenticated, service_role bypasses them.
+- Side effects of the probe on hosted: inserted sessions row id=HACKTEST name "[TEST] hack"; PATCH status=live on sessions id<>'x' (only HACKTEST existed); DELETE tags id<>'x' (0 tags existed).
+- Cleanup: DELETE /rest/v1/sessions?id=eq.HACKTEST (server key) -> 200. Row counts afterwards: sessions 0, tags 0, teams 0, participants 0, tag_events 0, announcements 0.
+- Exposure: NEXT_PUBLIC_* is inlined into client bundles. The dev server restarted at ~21:03 with this env served only "GET /" twice (route "/" does not import src/lib/admin-realtime.ts, the only reader of NEXT_PUBLIC_SUPABASE_*); no admin page was compiled or served. Dev server stopped immediately after detection. No `next build` was run with this env.
+- Guard added to hosted scripts: hosted-lib.mjs refuses to run when NEXT_PUBLIC_SUPABASE_ANON_KEY decodes to role service_role.
+
+## Follow-up (reported by MASTER, recorded here)
+- The service_role key string was present in .next/dev/static/chunks (client chunks, mtime 20:53) and .next/dev server chunks. Most likely cause: modules already compiled by the 20:51 local run (/admin/sessions/[id], ceremony) were recompiled by the dev server when .env.local changed at 20:53:58, inlining the NEXT_PUBLIC value. Browser runs after 20:53:58 loaded only /admin/login and /admin from localhost (headless Chromium); no run loaded the session/ceremony/race pages. The dev server of that time was also listening on the LAN.
+- MASTER deleted .next/dev (0 hits afterwards). User fixed NEXT_PUBLIC_SUPABASE_ANON_KEY to role=anon; keys were not rotated (user's choice).
+- Afterwards: dev server bound to 127.0.0.1 only; hosted runs passed; `npm run build` + scan of all of .next: service_role key 0 hits, JWT secret 0 hits (evidence/TODO-002/bundle-scan.txt).
