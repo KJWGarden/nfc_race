@@ -1,0 +1,1 @@
+# TODO-004 evidence key scan 2026-09-27T12:53:57.639Z: text files scanned=16; needles = hosted SUN_META_KEY, SUN_MASTER_KEY, derived file keys for 258 test UIDs (04C0FFEE000000..FF, 04AAAAAAAAAAAA, 04BBBBBBBBBBBB), service key, JWT secret (upper/lower hex); hits=0

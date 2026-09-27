@@ -55,3 +55,5 @@ PASS cleanup -- cleanup session MBRM2LXT: DELETE -> 200; rows (sessions,tags,tea
 PASS cleanup sun_counters 04C0FFEE000011 -- before=26 after=0
 PASS cleanup sun_counters 04C0FFEE000012 -- before=1 after=0
 PASS cleanup sun_counters 04C0FFEE000013 -- before=2 after=0
+PASS cleanup sun_counters 04C0FFEE000014 -- before=0 after=0
+RESULT failures=0
