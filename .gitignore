@@ -47,3 +47,6 @@ next-env.d.ts
 
 # omc tool state
 /.omc/
+
+
+/.ai/tasks/
