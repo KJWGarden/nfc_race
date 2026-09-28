@@ -1,10 +1,13 @@
-import { isAdmin, jsonError, jsonOk } from "@/lib/auth";
+import { configGuard, isAdmin, jsonError, jsonOk } from "@/lib/auth";
 import { store } from "@/lib/db";
 import { toSunParams } from "@/lib/nfc";
 import { verifySun } from "@/lib/sun-keys";
 
 // 기능: 관리자 모드(/t)의 읽기 전용 조회. SUN 을 검증해 UID·카운터와 등록 현황만 반환하고 아무것도 기록하지 않는다.
 export async function POST(request: Request) {
+  // 변경: 운영 설정 오류(비밀 값 누락·기본값)면 쿠키를 읽거나 쓰지 않고 503
+  const configError = configGuard();
+  if (configError) return configError;
   if (!(await isAdmin())) return jsonError("관리자 권한이 필요합니다.", 401);
   const body = (await request.json()) as { e?: unknown; c?: unknown };
   const sunParams = toSunParams(body.e, body.c);

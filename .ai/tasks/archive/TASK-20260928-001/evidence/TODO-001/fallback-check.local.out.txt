@@ -1,0 +1,5 @@
+PASS function missing -> 400 byte-equal old body (no 500) -- 400 {"ok":false,"error":"태그 정보가 없습니다."}
+PASS function missing -> 0 tag_events
+restored: 1 record_static_tag
+cleanup session RXK3TWGH: DELETE -> 200; rows (sessions,tags,teams,participants,tag_events,announcements) before=1,1,1,1,0,0 after=0,0,0,0,0,0; GET -> 404
+ALL PASS

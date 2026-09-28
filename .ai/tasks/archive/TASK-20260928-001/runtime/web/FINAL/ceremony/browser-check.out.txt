@@ -1,0 +1,13 @@
+browser-check-final-ceremony target=local at 2026-09-28T01:21:04.370Z
+PASS 1. admin login through /admin/login -> /admin
+PASS 2. ceremony page loads: '아직 완주 팀이 없습니다.'
+PASS 2.1 realtime-token responses [200,200]
+PASS 3. team tags C1 (SUN) -> 200
+PASS 3.1 team tags C2 -> finished (200)
+PASS 4. ceremony shows '1등 공개' without reload via realtime (796 ms within 5000 ms)
+PASS 4.1 '1등 공개' reveals the team name
+PASS cleanup session WMXLQX4F: DELETE -> 200; rows (sessions,tags,teams,participants,tag_events,announcements) before=1,2,1,1,2,0 after=0,0,0,0,0,0; GET -> 404
+PASS cleanup sun_counters 04C0FFEE000051 before=1 after=0
+PASS cleanup sun_counters 04C0FFEE000052 before=1 after=0
+
+RESULT failures=0

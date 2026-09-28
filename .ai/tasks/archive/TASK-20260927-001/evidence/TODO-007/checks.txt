@@ -1,0 +1,36 @@
+## env cross-check (process.env reads in src vs .env.example; NODE_ENV excluded: platform-provided)
+$ grep -rhoE 'process\.env\.[A-Z0-9_]+' src | sed 's/process.env.//' | sort -u | grep -v '^NODE_ENV$'
+ADMIN_PASSWORD
+APP_SECRET
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+NEXT_PUBLIC_SUPABASE_URL
+SUN_MASTER_KEY
+SUN_META_KEY
+SUPABASE_JWT_SECRET
+SUPABASE_SERVICE_ROLE_KEY
+SUPABASE_URL
+$ names in .env.example
+ADMIN_PASSWORD
+APP_SECRET
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+NEXT_PUBLIC_SUPABASE_URL
+SUN_MASTER_KEY
+SUN_META_KEY
+SUPABASE_JWT_SECRET
+SUPABASE_SERVICE_ROLE_KEY
+SUPABASE_URL
+$ diff (empty = match)
+MATCH
+$ values present in .env.example (expect none)
+NONE
+
+## AC2 grep
+$ grep -rn 'db.json\|writeFile\|fs/promises' src
+exit=1
+
+## .env.example not ignored
+?? .env.example
+!! .env.local
+
+## README data/db.json claim
+33:- 예전 버전이 쓰던 `data/db.json`은 더 이상 사용하지 않습니다. 파일이 남아 있어도 앱은 읽지 않습니다.

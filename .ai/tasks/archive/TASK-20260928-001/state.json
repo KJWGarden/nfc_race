@@ -1,0 +1,31 @@
+{
+  "task_id": "TASK-20260928-001",
+  "workflow": "FULL",
+  "stage": "COMPLETE",
+  "plan_review": "APPROVED",
+  "analysis_review": "APPROVED",
+  "final_review": "APPROVED",
+  "wiki_update": "COMPLETED",
+  "portfolio_update": "COMPLETED",
+  "archival_status": "ARCHIVED",
+  "current_todo": null,
+  "todos": [
+    {
+      "id": "TODO-001",
+      "status": "APPROVED",
+      "review_rounds": 1,
+      "review_file": "reviews/TODO-001-20260928-100444.json"
+    },
+    {
+      "id": "TODO-002",
+      "status": "APPROVED",
+      "review_rounds": 1,
+      "review_file": "reviews/TODO-002-20260928-101657.json"
+    }
+  ],
+  "plan_review_file": "reviews/plan-20260928-094728.json",
+  "analysis_review_file": "reviews/analysis-20260928-095557.json",
+  "final_runtime_regression": "PASSED",
+  "final_review_file": "reviews/final-20260928-102843.json",
+  "archive_note": "No compaction needed; moved to archive; cited paths verified."
+}

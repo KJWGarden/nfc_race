@@ -1,0 +1,19 @@
+PASS static URL -> {"token":"ab12cd34ef"}
+PASS static URL, trailing slash + spaces -> {"token":"ab12cd34ef"}
+PASS static URL upper case -> lowercased -> {"token":"ab12cd34ef"}
+PASS static URL with unrelated query -> {"token":"ab12cd34ef"}
+PASS SUN URL is not a static URL -> null
+PASS SUN URL still parsed as SUN -> {"e":"00000000000000000000000000000000","c":"0000000000000000"}
+PASS static URL is not a SUN URL -> null
+PASS short token -> null
+PASS 11-char token -> null
+PASS /t/s without params -> null
+PASS other path -> null
+PASS nested path -> null
+PASS relative / not a URL -> null
+PASS plain text record -> null
+PASS pending token ok -> {"token":"ab12cd34ef"}
+PASS pending token wrong type -> null
+PASS pending token wrong length -> null
+PASS pending token bad chars -> null
+ALL PASS

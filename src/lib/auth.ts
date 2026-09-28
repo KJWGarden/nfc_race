@@ -1,15 +1,58 @@
-import { createHmac } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
 
 const ADMIN_COOKIE = "cp_admin";
 const PARTICIPANT_COOKIE = "cp_pid";
+const DEFAULT_APP_SECRET = "checkpoint-dev-secret";
+const DEFAULT_ADMIN_PASSWORD = "admin123";
+
+export const CONFIG_ERROR = "서버 설정이 올바르지 않습니다. 운영자에게 문의해 주세요.";
 
 function secret() {
-  return process.env.APP_SECRET || "checkpoint-dev-secret";
+  return process.env.APP_SECRET || DEFAULT_APP_SECRET;
 }
 
-export function adminPassword() {
-  return process.env.ADMIN_PASSWORD || "admin123";
+function adminPassword() {
+  return process.env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
+}
+
+// 기능: 운영(NODE_ENV=production)에서 비었거나 기본값인 비밀 환경 변수의 이름 목록. 값은 절대 담지 않는다.
+export function configErrors(): string[] {
+  if (process.env.NODE_ENV !== "production") return [];
+  const invalid: string[] = [];
+  const password = process.env.ADMIN_PASSWORD;
+  if (!password || password === DEFAULT_ADMIN_PASSWORD) invalid.push("ADMIN_PASSWORD");
+  const appSecret = process.env.APP_SECRET;
+  if (!appSecret || appSecret === DEFAULT_APP_SECRET) invalid.push("APP_SECRET");
+  return invalid;
+}
+
+let configErrorLogged = false;
+
+// 기능: 설정 오류면 503 응답을 돌려준다 (쿠키를 읽거나 쓰기 전에 route handler 첫 줄에서 호출). 로그는 프로세스당 한 번, 변수 이름만.
+export function configGuard(): Response | null {
+  const invalid = configErrors();
+  if (invalid.length === 0) return null;
+  if (!configErrorLogged) {
+    configErrorLogged = true;
+    console.error(`[config] invalid (unset, empty or default): ${invalid.join(", ")}`);
+  }
+  return jsonError(CONFIG_ERROR, 503);
+}
+
+// 기능: 관리자 비밀번호를 고정 길이 해시로 비교해 길이·내용에 따른 시간 차이를 줄인다
+export function checkAdminPassword(input: unknown) {
+  if (typeof input !== "string" || !input) return false;
+  const digest = (value: string) => createHash("sha256").update(value).digest();
+  return timingSafeEqual(digest(input), digest(adminPassword()));
+}
+
+// 기능: 로그인 제한 키로 쓸 클라이언트 IP. Vercel 은 x-forwarded-for 를 직접 덮어쓰므로 첫 값을 신뢰한다.
+// next start 로 직접 운영하면 클라이언트가 보낸 값이 유지되므로 앞단 프록시가 이 헤더를 덮어써야 한다.
+export function clientIp(request: Request) {
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const ip = forwarded || request.headers.get("x-real-ip")?.trim() || "unknown";
+  return ip.toLowerCase().slice(0, 64);
 }
 
 function sign(value: string) {
@@ -46,6 +89,8 @@ export async function clearAdminCookie() {
 }
 
 export async function isAdmin() {
+  // 변경: 운영 설정 오류(기본 비밀 값)면 기본 키로 위조된 쿠키를 받아들이지 않도록 항상 거부
+  if (configErrors().length > 0) return false;
   const jar = await cookies();
   return unsign(jar.get(ADMIN_COOKIE)?.value) === "ok";
 }
@@ -59,6 +104,8 @@ export async function setParticipantCookie(participantId: string) {
 }
 
 export async function getParticipantId() {
+  // 변경: 운영 설정 오류면 참가자 쿠키도 신뢰하지 않는다
+  if (configErrors().length > 0) return null;
   const jar = await cookies();
   return unsign(jar.get(PARTICIPANT_COOKIE)?.value);
 }

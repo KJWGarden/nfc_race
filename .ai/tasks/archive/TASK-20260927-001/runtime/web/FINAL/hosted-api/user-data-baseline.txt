@@ -1,0 +1,21 @@
+# hosted user-data baseline [FINAL: immediately before hosted API runs] 2026-09-27T15:33:40.730Z (counts + digest of full rows; no content printed)
+sessions (non-[TEST]): 5 digest=00532b1cb4cfb079
+tags (in those sessions): 5 digest=9f32083b8df5a4a7
+teams (in those sessions): 10 digest=1a6df4d049fc4ee7
+participants (in those sessions): 10 digest=1947e1ca2507e50c
+tag_events (in those sessions): 0 digest=4f53cda18c2baa0c
+announcements (in those sessions): 0 digest=4f53cda18c2baa0c
+sun_counters (non-test UIDs): 0 digest=4f53cda18c2baa0c
+admin_login_attempts (non-test IPs, incl. 127.0.0.1 if any): 0
+[TEST] sessions present: 0
+
+# hosted user-data baseline [FINAL: immediately after hosted API runs] 2026-09-27T15:34:18.546Z (counts + digest of full rows; no content printed)
+sessions (non-[TEST]): 5 digest=00532b1cb4cfb079
+tags (in those sessions): 5 digest=9f32083b8df5a4a7
+teams (in those sessions): 10 digest=1a6df4d049fc4ee7
+participants (in those sessions): 10 digest=1947e1ca2507e50c
+tag_events (in those sessions): 0 digest=4f53cda18c2baa0c
+announcements (in those sessions): 0 digest=4f53cda18c2baa0c
+sun_counters (non-test UIDs): 0 digest=4f53cda18c2baa0c
+admin_login_attempts (non-test IPs, incl. 127.0.0.1 if any): 0
+[TEST] sessions present: 0

@@ -1,0 +1,63 @@
+# next build in the isolated copy (src synced from the repo, diff -r clean; no .env* files); env -i with only NEXT_PUBLIC_* (local)
+
+> nfc-walk-race@0.1.0 build
+> next build
+
+▲ Next.js 16.3.4 (Turbopack)
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /private/tmp/claude-501/-Users-kimgarden-dev-nfc-walk-race/87b58d43-e390-4d7e-9b05-4102e386eed8/scratchpad/package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * /private/tmp/claude-501/-Users-kimgarden-dev-nfc-walk-race/87b58d43-e390-4d7e-9b05-4102e386eed8/scratchpad/t5app/package-lock.json
+
+✓ Running next.config.ts took 53ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 709ms
+  Running TypeScript ...
+  Finished TypeScript in 1105ms ...
+  Collecting page data using 13 workers ...
+  Generating static pages using 13 workers (0/20) ...
+  Generating static pages using 13 workers (5/20) 
+  Generating static pages using 13 workers (10/20) 
+  Generating static pages using 13 workers (15/20) 
+✓ Generating static pages using 13 workers (20/20) in 95ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /admin
+├ ○ /admin/login
+├ ƒ /admin/sessions/[id]
+├ ƒ /admin/sessions/[id]/ceremony
+├ ƒ /api/admin/login
+├ ƒ /api/admin/logout
+├ ƒ /api/admin/realtime-token
+├ ƒ /api/admin/sdm-key
+├ ƒ /api/admin/sessions
+├ ƒ /api/admin/sessions/[id]
+├ ƒ /api/admin/sessions/[id]/announcements
+├ ƒ /api/admin/sessions/[id]/tags
+├ ƒ /api/admin/sessions/[id]/tags/[tagId]
+├ ƒ /api/admin/sessions/[id]/tags/[tagId]/sun
+├ ƒ /api/admin/sun/inspect
+├ ƒ /api/join
+├ ƒ /api/logout
+├ ƒ /api/me
+├ ƒ /api/rejoin
+├ ƒ /api/tag
+├ ƒ /api/teams
+├ ƒ /api/teams/join
+├ ƒ /join/[code]
+├ ○ /race
+└ ƒ /t/[token]
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+BUILD_EXIT=0

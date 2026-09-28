@@ -1,4 +1,4 @@
-// 변경: 정적 토큰 추출·NFC URL 쓰기를 제거하고 SUN URL(e, c) 파싱만 남긴다. 서버·클라이언트 공용 (브라우저 API 는 호출 시점에만 사용)
+// 변경: SUN URL(e, c) 파싱과 고정 URL(/t/{token}) 파싱. NFC URL 쓰기는 없다. 서버·클라이언트 공용 (브라우저 API 는 호출 시점에만 사용)
 
 export interface SunParams {
   e: string;
@@ -27,6 +27,33 @@ export function toSunParams(e: unknown, c: unknown): SunParams | null {
   if (typeof e !== "string" || typeof c !== "string") return null;
   if (!E_PATTERN.test(e) || !C_PATTERN.test(c)) return null;
   return { e, c };
+}
+
+export interface StaticTagParams {
+  token: string;
+}
+
+// 지점 토큰 형식 (createTagToken: 소문자·숫자 10자)
+export const STATIC_TOKEN_PATTERN = /^[0-9a-z]{10}$/i;
+const STATIC_PATH = /^\/t\/([0-9a-z]{10})\/?$/i;
+
+// 기능: 고정 URL(<origin>/t/{token}) 에서 토큰을 꺼낸다. SUN 파라미터가 있거나 형식이 다르면 null (호스트는 SUN 과 같이 보지 않음)
+export function parseStaticTagUrl(raw: string): StaticTagParams | null {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  if (parseSunUrl(url.href)) return null;
+  const match = STATIC_PATH.exec(url.pathname);
+  return match ? { token: match[1].toLowerCase() } : null;
+}
+
+// 기능: 보관된 고정 토큰 값 형식 확인
+export function toStaticParams(token: unknown): StaticTagParams | null {
+  if (typeof token !== "string" || !STATIC_TOKEN_PATTERN.test(token)) return null;
+  return { token: token.toLowerCase() };
 }
 
 export function isWebNfcAvailable() {

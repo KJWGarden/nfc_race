@@ -282,8 +282,8 @@ function InvitePanel({ sessionId, code }: { sessionId: string; code: string }) {
   );
 }
 
-// 변경: SUN 태그 전용 NFC 관리. 정적 URL·태그 QR·NFC 쓰기·토큰 복사·UID 직접 입력을 없애고
-// 태그에서 읽은 SUN URL 로 등록/기준 갱신하며, NXP 도구에 입력할 SDM 설정값과 UID 별 키를 보여 준다.
+// 변경: SUN 태그 NFC 관리. 태그에서 읽은 SUN URL 로 등록/기준 갱신하며, NXP 도구에 입력할 SDM 설정값과 UID 별 키를 보여 준다.
+// 세션별 '고정 QR/URL 허용' 스위치를 켜면 지점마다 고정 URL·복사·QR 을 함께 보여 준다 (NFC 쓰기·UID 직접 입력은 없음).
 function NfcPanel({
   live,
   onChange,
@@ -304,7 +304,28 @@ function NfcPanel({
   const [keyUid, setKeyUid] = useState("");
   const [fileKey, setFileKey] = useState<{ uid: string; fileReadKey: string } | null>(null);
   const [keyError, setKeyError] = useState("");
-  const template = sdmTemplate(originFromWindow());
+  const [switchError, setSwitchError] = useState("");
+  const [switchBusy, setSwitchBusy] = useState(false);
+  const origin = originFromWindow();
+  const template = sdmTemplate(origin);
+  const allowStatic = live.session.allowStaticUrl;
+
+  // 기능: 세션별 고정 QR/URL 허용 스위치 저장 후 화면 갱신
+  async function toggleStatic(next: boolean) {
+    setSwitchBusy(true);
+    setSwitchError("");
+    try {
+      await api(`/api/admin/sessions/${live.session.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ allowStaticUrl: next }),
+      });
+      await onChange();
+    } catch (err) {
+      setSwitchError(err instanceof Error ? err.message : "저장하지 못했습니다.");
+    } finally {
+      setSwitchBusy(false);
+    }
+  }
 
   async function createTag(event: React.FormEvent) {
     event.preventDefault();
@@ -343,11 +364,38 @@ function NfcPanel({
       <div>
         <h2 className="font-display text-3xl">NFC 지점</h2>
         <p className="mt-2 text-sm text-ink/55">
-          NTAG 424 DNA SUN 태그만 유효합니다. 각 지점에 태그를 찍어 읽은 URL로 등록하고, 레이스 시작 직전에 다시 찍어
-          기준 갱신하세요. 기준값 이하의 URL은 무효입니다.
+          NTAG 424 DNA SUN 태그는 스위치와 관계없이 항상 유효합니다. 각 지점에 태그를 찍어 읽은 URL로 등록하고, 레이스
+          시작 직전에 다시 찍어 기준 갱신하세요. 기준값 이하의 URL은 무효입니다.
         </p>
       </div>
       {notice ? <p className="rounded-2xl bg-lime/60 px-4 py-2 text-sm">{notice}</p> : null}
+
+      <section className="rounded-2xl bg-white p-4 text-sm">
+        <label className="flex items-center gap-3 font-semibold">
+          <input
+            type="checkbox"
+            checked={allowStatic}
+            disabled={switchBusy}
+            onChange={(e) => toggleStatic(e.target.checked)}
+            className="h-5 w-5 accent-moss"
+          />
+          고정 QR/URL 허용 (이 세션)
+          <span className={cn("text-xs", allowStatic ? "text-terra" : "text-ink/45")}>
+            {allowStatic ? "켜짐" : "꺼짐"}
+          </span>
+        </label>
+        <p className="mt-2 rounded-xl bg-gold/40 px-3 py-2 text-xs" data-testid="static-warning">
+          주의: 켜면 이 세션은 복사·공유 방지가 없어집니다. 사진으로 찍거나 공유된 QR/URL로 현장에 가지 않고도 지점이
+          인정될 수 있습니다. 꺼져 있으면 SUN 태그만 인정됩니다.
+        </p>
+        {allowStatic ? (
+          <p className="mt-2 text-xs text-ink/55">
+            켜져 있으면 지점마다 고정 URL과 QR이 표시됩니다. QR을 인쇄하거나, 같은 URL을 NFC 쓰기 앱으로 일반 NFC
+            태그(NTAG213 등)에 기록하세요. SUN 태그와 섞어 쓸 수 있습니다.
+          </p>
+        ) : null}
+        {switchError ? <p className="mt-2 text-terra">{switchError}</p> : null}
+      </section>
 
       <section className="rounded-2xl bg-white p-4 text-sm">
         <h3 className="font-semibold">태그 SDM 설정값 (NXP 도구에 입력)</h3>
@@ -386,6 +434,7 @@ function NfcPanel({
             key={tag.id}
             sessionId={live.session.id}
             tag={tag}
+            staticUrl={allowStatic ? `${origin}/t/${tag.token}` : null}
             onChange={onChange}
             onRemove={() => removeTag(tag)}
             setNotice={setNotice}
@@ -424,12 +473,14 @@ function sdmTemplate(origin: string) {
 function SunTagRow({
   sessionId,
   tag,
+  staticUrl,
   onChange,
   onRemove,
   setNotice,
 }: {
   sessionId: string;
   tag: NfcTag;
+  staticUrl: string | null;
   onChange: () => Promise<void>;
   onRemove: () => void;
   setNotice: (value: string) => void;
@@ -438,7 +489,19 @@ function SunTagRow({
   const [error, setError] = useState("");
   const [confirmReplace, setConfirmReplace] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
   const registered = tag.uid !== "";
+
+  // 기능: 고정 URL 을 클립보드에 복사 (NFC 쓰기 앱에 붙여넣기용)
+  async function copyStaticUrl() {
+    if (!staticUrl) return;
+    try {
+      await navigator.clipboard.writeText(staticUrl);
+      setCopied(true);
+    } catch {
+      setError("URL을 복사하지 못했습니다. 직접 선택해 복사하세요.");
+    }
+  }
 
   async function submit(sunUrl: string, replace: boolean) {
     setBusy(true);
@@ -546,6 +609,25 @@ function SunTagRow({
         </div>
       ) : null}
       {error ? <p className="mt-2 text-xs text-terra">{error}</p> : null}
+      {/* 기능: 고정 QR/URL 허용 세션에서만 지점 고정 URL·복사·QR 표시 */}
+      {staticUrl ? (
+        <div className="mt-3 flex flex-wrap items-start gap-4 rounded-xl bg-paper p-3">
+          <div className="min-w-0 flex-1 text-xs">
+            <p className="font-semibold">고정 URL (QR·일반 NFC 태그용)</p>
+            <p className="mt-1 break-all font-mono" data-testid={`static-url-${tag.order}`}>
+              {staticUrl}
+            </p>
+            <button
+              type="button"
+              onClick={copyStaticUrl}
+              className="mt-2 rounded-full bg-ink px-3 py-1.5 text-paper"
+            >
+              {copied ? "복사됨" : "URL 복사"}
+            </button>
+          </div>
+          <QrImage value={staticUrl} size={140} label={`${tag.order}. ${tag.name}`} />
+        </div>
+      ) : null}
     </li>
   );
 }

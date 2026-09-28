@@ -1,0 +1,9 @@
+src/app/admin/page.tsx:32:5 error react-hooks/set-state-in-effect Error: Calling setState synchronously within an effect can trigger cascading renders
+src/app/admin/sessions/[id]/ceremony/page.tsx:22:5 error react-hooks/set-state-in-effect Error: Calling setState synchronously within an effect can trigger cascading renders
+src/app/admin/sessions/[id]/ui.tsx:34:5 error react-hooks/set-state-in-effect Error: Calling setState synchronously within an effect can trigger cascading renders
+src/app/layout.tsx:24:9 warning @next/next/no-page-custom-font Custom fonts not added in `pages/_document.js` will only load for a single page. This is discouraged. See: https://nextjs.org/docs/messages/no-page-custom-font
+src/app/race/page.tsx:22:34 error react-hooks/purity Error: Cannot call impure function during render
+src/app/race/page.tsx:48:5 error react-hooks/set-state-in-effect Error: Calling setState synchronously within an effect can trigger cascading renders
+src/app/race/page.tsx:130:23 error react-hooks/set-state-in-effect Error: Calling setState synchronously within an effect can trigger cascading renders
+src/app/race/page.tsx:131:6 warning react-hooks/exhaustive-deps React Hook useEffect has a missing dependency: 'submitTag'. Either include it or remove the dependency array.
+src/components/qr-image.tsx:42:7 warning @next/next/no-img-element Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element

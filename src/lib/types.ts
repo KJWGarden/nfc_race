@@ -11,6 +11,8 @@ export interface Session {
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
+  // 기능: 이 세션에서 고정 URL(QR·일반 NFC) 태깅을 허용하는지 (기본 꺼짐)
+  allowStaticUrl: boolean;
 }
 
 export interface NfcTag {
@@ -97,7 +99,7 @@ export interface TeamRaceView {
   participant: Participant;
   session: Pick<
     Session,
-    "id" | "name" | "status" | "checkpointCount" | "description"
+    "id" | "name" | "status" | "checkpointCount" | "description" | "allowStaticUrl"
   >;
   team: Team | null;
   members: Participant[];
@@ -119,6 +121,16 @@ export interface AdminLiveView {
   events: TagEvent[];
   announcements: Announcement[];
   rankings: RankedTeam[];
+}
+
+// 기능: 고정 URL(/t/{token}) 화면 분기용 지점·세션 정보. 서버 컴포넌트에서만 읽고 토큰은 담지 않는다.
+export interface StaticTagInfo {
+  tagName: string;
+  order: number;
+  sessionId: string;
+  sessionName: string;
+  sessionStatus: SessionStatus;
+  allowStaticUrl: boolean;
 }
 
 // 기능: 관리자 모드(/t) SUN 조회 결과. UID·카운터·기준값만 담고 키는 담지 않는다.

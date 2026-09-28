@@ -7,8 +7,8 @@ This workflow runs in **nfc-walk-race** (CHECKPOINT), a Next.js web app for an N
 ## Stack
 
 - Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS 4
-- Persistence: `data/db.json` through `src/lib/db.ts` (one in-process write chain). There is no database server.
-- Realtime: `src/lib/realtime.ts` `publish()`, read by `GET /api/events`
+- Persistence: Supabase Postgres through `src/lib/db.ts` (server-only client in `src/lib/supabase-server.ts`, atomic writes in SQL functions). Schema: `supabase/migrations/`. `data/db.json` is no longer used.
+- Realtime: participants poll `/api/me` every 10 s; admin screens use a private Supabase Realtime channel (`src/lib/admin-realtime.ts`, token from `GET /api/admin/realtime-token`). There is no SSE route.
 - Auth: HMAC-signed httpOnly cookies in `src/lib/auth.ts`
   - admin cookie `cp_admin`, password `ADMIN_PASSWORD` (default `admin123`)
   - participant cookie `cp_pid`
@@ -896,7 +896,7 @@ Copy an earlier report into the Task `evidence/` directory if it must be kept.
 
 - Dev server at `http://localhost:3000` (`npm run dev`).
 - For admin flows, sign in at `/admin/login`. Default password is `admin123` unless `ADMIN_PASSWORD` is set.
-- Seeded session code `DEMO01` exists when `data/db.json` was created by `src/lib/db.ts`.
+- Seeded session code `DEMO01` exists only on the local Supabase stack after `supabase db reset` (`supabase/seed.sql`). Never seed the hosted project.
 - Do not commit `data/db.json` changes that were only made to exercise a flow, unless the Todo's acceptance criteria require a data change.
 
 The MASTER should satisfy missing preconditions itself when it can

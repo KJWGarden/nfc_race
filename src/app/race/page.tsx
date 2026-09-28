@@ -5,7 +5,16 @@ import { useRouter } from "next/navigation";
 import { AnnounceBanner, AnnounceToast } from "@/components/announce-banner";
 import { api } from "@/lib/api";
 import { cn, formatDuration, sessionStatusLabel } from "@/lib/format";
-import { isWebNfcAvailable, parseSunUrl, scanNfcOnce, toSunParams, type SunParams } from "@/lib/nfc";
+import {
+  isWebNfcAvailable,
+  parseStaticTagUrl,
+  parseSunUrl,
+  scanNfcOnce,
+  toStaticParams,
+  toSunParams,
+  type StaticTagParams,
+  type SunParams,
+} from "@/lib/nfc";
 import { overlayFor, PENDING_TAG_KEY, takeTagFlash, type TagSuccess } from "@/lib/tag-result";
 import type { TeamRaceView } from "@/lib/types";
 
@@ -82,8 +91,8 @@ export default function RacePage() {
     };
   }, [load]);
 
-  // 변경: 태깅은 SUN 파라미터(e, c)로만 제출한다
-  async function submitTag(payload: SunParams) {
+  // 변경: 태깅은 SUN 파라미터(e, c) 또는 고정 URL 토큰({token})으로 제출한다 (고정 URL 인정 여부는 서버가 판단)
+  async function submitTag(payload: SunParams | StaticTagParams) {
     try {
       const result = await api<TagSuccess>("/api/tag", {
         method: "POST",
@@ -101,9 +110,11 @@ export default function RacePage() {
     setScanning(true);
     setError("");
     try {
-      // 변경: NDEF URL 레코드에서 SUN 파라미터를 꺼내 제출 (UID 만으로는 제출하지 않음)
+      // 변경: NDEF URL 레코드에서 SUN 파라미터를 꺼내 제출. 세션 스위치가 켜져 있으면 고정 URL 토큰도 제출 (UID 만으로는 제출하지 않음)
       const { url } = await scanNfcOnce();
-      const payload = url ? parseSunUrl(url) : null;
+      const payload = url
+        ? (parseSunUrl(url) ?? (view?.session.allowStaticUrl ? parseStaticTagUrl(url) : null))
+        : null;
       if (!payload) throw new Error("SUN 태그가 아닙니다.");
       await submitTag(payload);
     } catch (err) {
@@ -119,11 +130,11 @@ export default function RacePage() {
     if (!pending) return;
     pendingUsed.current = true;
     sessionStorage.removeItem(PENDING_TAG_KEY);
-    // 변경: 보관된 SUN 파라미터(JSON)만 한 번 제출하고, 예전 토큰 문자열 등 형식이 다르면 버린다
-    let payload: SunParams | null = null;
+    // 변경: 보관된 SUN 파라미터 또는 고정 토큰(JSON)만 한 번 제출하고, 예전 토큰 문자열 등 형식이 다르면 버린다
+    let payload: SunParams | StaticTagParams | null = null;
     try {
-      const parsed = JSON.parse(pending) as { e?: unknown; c?: unknown };
-      payload = toSunParams(parsed?.e, parsed?.c);
+      const parsed = JSON.parse(pending) as { e?: unknown; c?: unknown; token?: unknown };
+      payload = toSunParams(parsed?.e, parsed?.c) ?? toStaticParams(parsed?.token);
     } catch {
       payload = null;
     }

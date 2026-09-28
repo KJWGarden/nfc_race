@@ -184,6 +184,8 @@ export function buildTeamRaceView(input: {
       status: input.session.status,
       checkpointCount: input.session.checkpointCount,
       description: input.session.description,
+      // 변경: 참가자 화면에는 고정 URL 허용 여부(boolean)만 추가로 전달
+      allowStaticUrl: input.session.allowStaticUrl,
     },
     team: input.team,
     members: input.members,

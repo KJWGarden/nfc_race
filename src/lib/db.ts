@@ -6,6 +6,7 @@ import type {
   Participant,
   Session,
   SessionStatus,
+  StaticTagInfo,
   SunAdminContext,
   TagEvent,
   Team,
@@ -41,6 +42,8 @@ function toSession(r: Row): Session {
     createdAt: iso(r.created_at),
     startedAt: isoOrNull(r.started_at),
     finishedAt: isoOrNull(r.finished_at),
+    // 변경: 마이그레이션 적용 전(컬럼 없음)에도 꺼짐으로 읽는다
+    allowStaticUrl: r.allow_static_url === true,
   };
 }
 
@@ -131,6 +134,8 @@ function check<T>(result: { data: T; error: PostgrestError | null }): T {
 
 const UNIQUE_VIOLATION = "23505";
 const MAX_CODE_ATTEMPTS = 5;
+// PostgREST 스키마 캐시에 없는 함수(PGRST202) / Postgres 에 없는 함수(42883)
+const FUNCTION_NOT_FOUND = ["PGRST202", "42883"];
 
 function toTeamRaceView(data: Row | null): TeamRaceView | null {
   if (!data) return null;
@@ -190,7 +195,7 @@ type RecordTagResult =
   | { ok: false; error: string; event?: TagEvent; view?: TeamRaceView | null }
   | { ok: true; event: TagEvent; view: TeamRaceView | null; tag: TagSummary };
 
-// 기능: record_tag / record_sun_tag 의 공통 jsonb 결과를 RecordTagResult 로 변환
+// 기능: record_sun_tag / record_static_tag 의 공통 jsonb 결과를 RecordTagResult 로 변환
 function toRecordTagResult(data: Row): RecordTagResult {
   if (!data.event) return { ok: false, error: data.error as string };
   const event = toEvent(data.event as Row);
@@ -252,7 +257,7 @@ export const store = {
     patch: Partial<
       Pick<
         Session,
-        "name" | "description" | "checkpointCount" | "awardRanks" | "status"
+        "name" | "description" | "checkpointCount" | "awardRanks" | "status" | "allowStaticUrl"
       >
     >,
   ): Promise<Session | null> {
@@ -267,7 +272,9 @@ export const store = {
     if (patch.awardRanks != null) {
       update.award_ranks = Math.max(1, Math.floor(patch.awardRanks));
     }
-    // 기능: 상태 전환 시 시작/종료 시각 규칙은 기존과 동일
+    // 기능: 고정 URL 허용 스위치는 boolean 일 때만 반영
+    if (typeof patch.allowStaticUrl === "boolean") update.allow_static_url = patch.allowStaticUrl;
+        // 기능: 상태 전환 시 시작/종료 시각 규칙은 기존과 동일
     if (patch.status != null) {
       const at = new Date().toISOString();
       update.status = patch.status;
@@ -395,6 +402,19 @@ export const store = {
     return { ok: true as const, participant, session };
   },
 
+  // 기능: 세션 코드 + 팀 코드 + 정규화 이름으로 기존 참가자를 찾는다 (이름 비교는 DB normalize_name 하나로만)
+  async findRejoinParticipant(
+    code: string,
+    joinCode: string,
+    name: string,
+  ): Promise<{ ok: true; participantId: string } | { ok: false; reason: "not_found" | "ambiguous" }> {
+    const data = check(
+      await getSupabase().rpc("rejoin_lookup", { p_code: code, p_join_code: joinCode, p_name: name }),
+    ) as Row;
+    if (typeof data.participantId === "string") return { ok: true, participantId: data.participantId };
+    return { ok: false, reason: data.error === "ambiguous" ? "ambiguous" : "not_found" };
+  },
+
   async getParticipant(id: string): Promise<Participant | null> {
     const data = check(
       await getSupabase().from("participants").select("*").eq("id", id).maybeSingle(),
@@ -479,6 +499,41 @@ export const store = {
     return toRecordTagResult(data);
   },
 
+  // 기능: 고정 URL 토큰 태깅. 스위치 확인·팀 잠금·경주 규칙·기록을 record_static_tag 한 트랜잭션에서 처리
+  async recordStaticTag(input: { participantId: string; token: string }): Promise<RecordTagResult> {
+    const result = await getSupabase().rpc("record_static_tag", {
+      p_participant_id: input.participantId,
+      p_token: input.token,
+      p_event_id: createId(),
+    });
+    // 기능: 마이그레이션 적용 전(함수 없음)에는 기존과 같은 400 응답을 유지한다
+    if (result.error && FUNCTION_NOT_FOUND.includes(result.error.code)) {
+      return { ok: false, error: "태그 정보가 없습니다." };
+    }
+    return toRecordTagResult(check(result) as Row);
+  },
+
+  // 기능: 고정 URL 토큰으로 지점과 그 세션의 스위치 상태를 읽는다 (읽기 전용, /t 서버 컴포넌트 전용)
+  async getStaticTagInfo(token: string): Promise<StaticTagInfo | null> {
+    const data = check(
+      await getSupabase()
+        .from("tags")
+        .select("name,position,session_id,sessions(name,status,allow_static_url)")
+        .eq("token", token.toLowerCase())
+        .maybeSingle(),
+    ) as Row | null;
+    const session = data?.sessions as Row | null | undefined;
+    if (!data || !session) return null;
+    return {
+      tagName: data.name as string,
+      order: data.position as number,
+      sessionId: data.session_id as string,
+      sessionName: session.name as string,
+      sessionStatus: session.status as SessionStatus,
+      allowStaticUrl: session.allow_static_url === true,
+    };
+  },
+
   // 기능: 검증된 SUN 읽기로 지점에 태그를 묶고 기준 카운터를 설정 (register_tag_sun 한 트랜잭션)
   async registerTagSun(input: {
     sessionId: string;
@@ -539,6 +594,19 @@ export const store = {
         })),
       })),
     };
+  },
+
+  // 기능: 관리자 로그인 시도를 비밀번호 확인 전에 DB 에서 원자적으로 센다 (IP 별 15분 창, 5회 초과 시 잠금)
+  async adminLoginAttempt(
+    ip: string,
+  ): Promise<{ allowed: true } | { allowed: false; retryAfterSec: number }> {
+    const data = check(await getSupabase().rpc("admin_login_attempt", { p_ip: ip })) as Row;
+    if (data.allowed === true) return { allowed: true };
+    return { allowed: false, retryAfterSec: data.retryAfterSec as number };
+  },
+
+  async clearAdminLoginAttempts(ip: string): Promise<void> {
+    check(await getSupabase().rpc("admin_login_success", { p_ip: ip }));
   },
 
   async getTeamRace(participantId: string): Promise<TeamRaceView | null> {

@@ -1,0 +1,30 @@
+# .next secret-value scan 2026-09-27T14:32:34.969Z (values never printed)
+# columns: build output = every .next file except .next/cache and .next/dev/cache (Turbopack persistent caches: local-only, gitignored, not deployed); static = .next/static (client bundle)
+
+## repo .next (hosted .env.local build): 1057 files (86 cache files)
+hosted SUPABASE_SERVICE_ROLE_KEY: build output=0, static=0, turbopack cache=0
+hosted SUPABASE_JWT_SECRET: build output=0, static=0, turbopack cache=2
+hosted SUN_META_KEY: build output=0, static=0, turbopack cache=2
+hosted SUN_MASTER_KEY: build output=0, static=0, turbopack cache=2
+hosted ADMIN_PASSWORD: build output=40, static=0, turbopack cache=2  [value is the built-in default; build-output hits are the code constant in src/lib/auth.ts]
+hosted APP_SECRET: build output=40, static=0, turbopack cache=2  [value is the built-in default; build-output hits are the code constant in src/lib/auth.ts]
+local SUPABASE_SERVICE_ROLE_KEY: build output=0, static=0, turbopack cache=0
+local SUPABASE_JWT_SECRET: build output=0, static=0, turbopack cache=0
+local SUN_META_KEY: build output=0, static=0, turbopack cache=1
+local SUN_MASTER_KEY: build output=0, static=0, turbopack cache=1
+local ADMIN_PASSWORD: build output=0, static=0, turbopack cache=0
+local APP_SECRET: build output=0, static=0, turbopack cache=1
+
+## isolated copy .next (no-secrets build, used for prod checks): 673 files (18 cache files)
+hosted SUPABASE_SERVICE_ROLE_KEY: build output=0, static=0, turbopack cache=0
+hosted SUPABASE_JWT_SECRET: build output=0, static=0, turbopack cache=0
+hosted SUN_META_KEY: build output=0, static=0, turbopack cache=0
+hosted SUN_MASTER_KEY: build output=0, static=0, turbopack cache=0
+hosted ADMIN_PASSWORD: build output=8, static=0, turbopack cache=0  [value is the built-in default; build-output hits are the code constant in src/lib/auth.ts]
+hosted APP_SECRET: build output=8, static=0, turbopack cache=1  [value is the built-in default; build-output hits are the code constant in src/lib/auth.ts]
+local SUPABASE_SERVICE_ROLE_KEY: build output=0, static=0, turbopack cache=0
+local SUPABASE_JWT_SECRET: build output=0, static=0, turbopack cache=0
+local SUN_META_KEY: build output=0, static=0, turbopack cache=0
+local SUN_MASTER_KEY: build output=0, static=0, turbopack cache=0
+local ADMIN_PASSWORD: build output=0, static=0, turbopack cache=0
+local APP_SECRET: build output=0, static=0, turbopack cache=0

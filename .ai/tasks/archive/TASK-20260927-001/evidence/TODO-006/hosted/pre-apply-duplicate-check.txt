@@ -1,0 +1,5 @@
+# hosted read-only pre-check before applying 20260927170000_participant_rejoin.sql, 2026-09-27T14:39:55.228Z
+sessions content-range: 0-3/4; teams: 0-4/5; participants: 0-4/5
+participants rows read: 5 (with team: 5)
+(team_id, normalized name) groups with >1 member: 0  (JS approximation of normalize_name: collapse whitespace, trim, lowercase)
+functions present before apply: rejoin_lookup=404 (404 = not yet applied)

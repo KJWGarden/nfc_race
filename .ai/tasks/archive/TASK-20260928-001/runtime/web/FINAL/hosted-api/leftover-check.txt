@@ -1,0 +1,5 @@
+# hosted leftover check 2026-09-28T01:27:32.219Z
+[TEST] sessions: 0
+sun_counters 04C0FFEE*: 0
+admin_login_attempts 203.0.113.*: 0
+sessions with allow_static_url=true: 0

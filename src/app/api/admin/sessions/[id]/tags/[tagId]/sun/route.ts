@@ -1,4 +1,4 @@
-import { isAdmin, jsonError, jsonOk } from "@/lib/auth";
+import { configGuard, isAdmin, jsonError, jsonOk } from "@/lib/auth";
 import { store } from "@/lib/db";
 import { parseSunUrl, toSunParams } from "@/lib/nfc";
 import { verifySun } from "@/lib/sun-keys";
@@ -7,6 +7,9 @@ type Ctx = { params: Promise<{ id: string; tagId: string }> };
 
 // 기능: 태그에서 읽은 SUN URL(또는 e, c)로 지점에 물리 태그를 등록하거나 기준 카운터를 갱신한다
 export async function POST(request: Request, { params }: Ctx) {
+  // 변경: 운영 설정 오류(비밀 값 누락·기본값)면 쿠키를 읽거나 쓰지 않고 503
+  const configError = configGuard();
+  if (configError) return configError;
   if (!(await isAdmin())) return jsonError("관리자 권한이 필요합니다.", 401);
   const { id, tagId } = await params;
   const body = (await request.json()) as { url?: unknown; e?: unknown; c?: unknown; replace?: unknown };
