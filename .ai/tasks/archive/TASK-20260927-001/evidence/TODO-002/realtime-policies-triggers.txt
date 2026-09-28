@@ -1,7 +1,0 @@
-cp admin receive|SELECT|{authenticated}
-announcements_notify_admin
-participants_notify_admin
-sessions_notify_admin
-tag_events_notify_admin
-tags_notify_admin
-teams_notify_admin

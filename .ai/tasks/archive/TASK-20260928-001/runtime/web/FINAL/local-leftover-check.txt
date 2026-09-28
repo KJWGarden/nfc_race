@@ -1,3 +1,0 @@
-test_sessions|0
-test_counters|0
-sessions_total|1

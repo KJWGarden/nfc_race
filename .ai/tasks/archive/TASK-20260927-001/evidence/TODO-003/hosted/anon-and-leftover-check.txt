@@ -1,8 +1,0 @@
-# TODO-003 hosted anon + leftover check 2026-09-27T12:35:25.924Z (anon = NEXT_PUBLIC_SUPABASE_ANON_KEY, guard: not service_role)
-GET /rest/v1/sun_counters?select=* -> HTTP 401 {"code":"42501","details":null,"hint":"Grant the required privileges to the current role with: GRANT SELECT ON public.sun_counters TO anon;","message":"permission denied for table sun_counters"}
-POST /rest/v1/sun_counters -> HTTP 401 {"code":"42501","details":null,"hint":"Grant the required privileges to the current role with: GRANT INSERT ON public.sun_counters TO anon;","message":"permission denied for table sun_counters"}
-POST /rest/v1/rpc/record_sun_tag -> HTTP 401 {"code":"42501","details":null,"hint":null,"message":"permission denied for function record_sun_tag"}
-GET /rest/v1/tags?select=baseline_ctr -> HTTP 401 {"code":"42501","details":null,"hint":"Grant the required privileges to the current role with: GRANT SELECT ON public.tags TO anon;","message":"permission denied for table tags"}
-leftover [TEST] sessions: 0
-leftover sun_counters for test UIDs 04C0FFEE*: 0 (first attempt used TODO-002 countRows, which selects "id"; sun_counters has no id column -> HTTP 400; rerun with sun-lib countRows)
-total sun_counters rows on hosted: 0

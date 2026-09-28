@@ -1,5 +1,0 @@
-# AC8 bundle scan 2026-09-27T11:28:47Z
-$ grep -rlF "<SUPABASE_SERVICE_ROLE_KEY value>" .next/static  (value not recorded)
-exit=1 (1 = no match)
-$ grep -rlE "SUPABASE_SERVICE_ROLE_KEY|supabase-server" .next/static
-exit=1

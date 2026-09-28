@@ -1,7 +1,0 @@
-# hosted leftover check 2026-09-27T14:31:11Z (host: gkngkikaegicvsursxjr)
-admin_login_attempts rows (all IPs): 0 test-IP rows: 0
-[TEST] sessions: []
-[TEST] participants: []
-# after hosted regression 2026-09-27T14:32:50Z
-admin_login_attempts: []
-[TEST] sessions: []
