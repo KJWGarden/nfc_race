@@ -86,3 +86,108 @@ body {
 .animate-toast {
   animation: toast-in 0.35s ease both;
 }
+
+/* 기능: 경로 순서 지도(route-map.tsx) 크레파스 그리기 애니메이션. pathLength=1 획을 dashoffset 으로 그려 나간다 */
+.crayon-paper {
+  background-color: #fffaf0;
+  background-image: radial-gradient(color-mix(in oklab, var(--color-ink) 7%, transparent) 0.8px, transparent 1px);
+  background-size: 14px 14px;
+  border: 1px solid color-mix(in oklab, var(--color-ink) 8%, transparent);
+}
+
+@keyframes crayon-draw {
+  0% {
+    stroke-dasharray: 1 1;
+    stroke-dashoffset: 1;
+    opacity: 0;
+  }
+  1% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dasharray: 1 1;
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+@keyframes crayon-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.45) rotate(-14deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.08) rotate(3deg);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes crayon-fade {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.crayon-draw {
+  animation: crayon-draw 0.5s cubic-bezier(0.45, 0.05, 0.4, 1) both;
+}
+
+.crayon-pop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: crayon-pop 0.4s cubic-bezier(0.2, 1.3, 0.35, 1) both;
+}
+
+.crayon-fade {
+  animation: crayon-fade 0.35s ease both;
+}
+
+/* 기능: 동작 줄이기 설정이면 애니메이션 없이 완성된 지도를 바로 보여 준다 */
+@media (prefers-reduced-motion: reduce) {
+  .crayon-draw,
+  .crayon-pop,
+  .crayon-fade {
+    animation: none;
+  }
+}
+
+/* 기능: 상단 고정 미니 경로 지도의 나타남/사라짐 전환. 숨김 상태는 클릭을 막지 않는다 */
+.route-mini {
+  opacity: 0;
+  transform: translateY(-140%);
+  visibility: hidden;
+  transition:
+    opacity 0.2s ease,
+    transform 0.28s cubic-bezier(0.3, 1.2, 0.4, 1),
+    visibility 0s linear 0.28s;
+}
+
+.route-mini > * {
+  pointer-events: none;
+}
+
+.route-mini[data-shown="true"] {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.route-mini[data-shown="true"] > * {
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-mini {
+    transition: none;
+  }
+}

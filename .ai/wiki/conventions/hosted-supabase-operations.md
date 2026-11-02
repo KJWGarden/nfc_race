@@ -9,7 +9,7 @@ related_files:
   - supabase/config.toml
   - README.md
   - .env.example
-updated: 2026-09-28
+updated: 2026-11-02
 ---
 
 # Summary
@@ -28,14 +28,19 @@ updated: 2026-09-28
 
 - **Migrations**
   - Schema lives in `supabase/migrations/<timestamp>_<name>.sql`, applied in file-name order.
-  - There are seven current files:
+  - There are nine current files:
     - dated 20260927: `…120000_init`, `…130000_admin_realtime`, `…140000_sun`, `…150000_sun_register`, `…160000_admin_login_attempts`, `…170000_participant_rejoin`;
-    - `20260928100000_static_tag_switch`.
-  - All seven have been applied on hosted by the user.
+    - `20260928100000_static_tag_switch`;
+    - `20261028100000_tag_library` (TASK-20261028-001);
+    - `20261102100000_shared_tag_library` (TASK-20261102-001).
+  - The first eight have been applied on hosted by the user (the eighth on 2026-10-28). The ninth was **not** applied on hosted during TASK-20261102-001; a read-only, count-only pre-check for swapped bindings was prepared (`.ai/tasks/archive/TASK-20261102-001/evidence/TODO-001/hosted-precheck.sql`) for the user to run first.
   - **Deploy order:** the user applies a new migration on hosted in the SQL Editor **before** deploying the app version that uses it. The hosted API check for that Task runs only after the user confirms the migration is applied.
+  - **Reverse deploy window (data-migrating migrations):** when a migration changes the meaning of existing data, the old app may misbehave between apply and deploy. For `20261102100000_shared_tag_library` (library tokens leave `tags.token`), the old app's `/t` stops crediting library static URLs until the new app is live. Rule: apply it and deploy the new app **immediately afterwards**, and **never during a live race**. README states this. The migration also converts existing swapped bindings and raises (aborting atomically) if it finds a broken or orphan swap.
   - When practical, code should tolerate the window before the migration is applied. The static switch, for example:
     - reads the new column defensively (`=== true`);
     - maps a missing RPC (PGRST202 / 42883) to the pre-change response.
+  - The tag library extends this to a missing table: `LIBRARY_UNAVAILABLE` = PGRST202, 42883, PGRST205, 42P01 → list `available:false`, writes 503 with a "DB 업데이트가 필요합니다" message, side calls skipped (`features/tag-library.md`). Route all access to a new table through RPCs so one code set covers the window.
+  - When a migration **replaces** functions that keep their names, a missing-RPC error cannot detect the old schema. Add a capability probe function that exists only in the new migration (e.g. `shared_library_schema()`, checked by `requireSharedLibrary()` in `db.ts`) and call it before every dependent write (`features/shared-checkpoint-routes.md`).
   - Additive `add column … not null default <constant>` changes are metadata-only on PG11+ and do not break the running app.
   - Agents apply them locally with `supabase migration up --local`, or `supabase db reset --local` for a fresh local DB. The user applies the same file on hosted.
   - Implementation manifests record each new file's sha256. They also record before/after hashes showing that the existing files are byte-identical.
@@ -47,6 +52,7 @@ updated: 2026-09-28
   - Read-only snapshots record per-table counts plus a SHA-256 digest of the rows, never their content. They are taken immediately before and after the run and must be identical for non-test data.
   - Browser runs are not made against hosted, so user session names are never rendered. Hosted coverage is API-only.
   - Leftover checks confirm 0 `[TEST]` rows afterwards.
+  - **Explicit user authorization is required before any hosted check.** Hosted test runs write `[TEST]` data, and the agent auto-mode classifier blocks those hosted writes until the user explicitly approves the run. Ask the user (through the MASTER) after they confirm the migration is applied; do not try to work around the block. Hosted scripts also require an explicit opt-in flag (e.g. `CONFIRM_HOSTED=1` in TASK-20261028-001).
 - **"Wrong" test codes:** impossible values such as `OOOOOO` / `IIII`, since generated codes never contain I or O.
 - **Local stack:** `supabase start` in the repo uses ports 55420-55429 (API 55421, DB 55422, studio 55423). Another project's stack uses the default 543xx ports and must not be touched.
 - **Dev server:** `npx next dev -H 127.0.0.1 -p 3000`. For local validation, env values come from a scratchpad env file exported into the process environment; exported values override `.env.local`. `.env.local` itself points at hosted.
@@ -86,7 +92,10 @@ updated: 2026-09-28
 - In TASK-20260928-001 the practice was repeated. The final local run reset the DB with all seven migrations. The hosted API checks ran after the user applied the new migration, and they were bracketed by identical user-data digests.
   - The sessions digest changed only because `select=*` now includes the new column.
   - 0 `[TEST]` rows and 0 switched-on sessions remained.
-- Checks that must simulate a missing function (the deploy-window fallback) are run **only locally**. They rename the function and then restore it.
+- TASK-20261028-001 repeated it again: the user applied the eighth migration and explicitly authorized the hosted check; the hosted API regression passed 42/42 with identical user-data digests (including `tag_library`) and 0 leftovers by exact id (`.ai/tasks/archive/TASK-20261028-001/runtime/web/FINAL/hosted/hosted-check.out.txt`). The seven earlier files stayed byte-identical.
+  - The new unique index was on a new, all-null column, so no hosted pre-check for violations was needed.
+- TASK-20261102-001 validated the ninth migration only locally: the eight-migration schema was reset, swapped bindings were created with the old functions, the new app's deploy-window behavior was checked, then `supabase migration up --local` applied the new file and the post-migration checks ran (162/162, `.ai/tasks/archive/TASK-20261102-001/runtime/web/FINAL/api-check.out.txt`). The eight earlier files stayed byte-identical.
+- Checks that must simulate a missing function (the deploy-window fallback) are run **only locally**. They rename the function and then restore it, or (TASK-20261102-001) run the new app against a local DB reset with the new migration set aside.
 
 # Future Considerations
 
@@ -96,3 +105,5 @@ None confirmed.
 
 - TASK-20260927-001
 - TASK-20260928-001 (seventh migration, deploy order)
+- TASK-20261028-001 (eighth migration, table-level deploy window, explicit authorization for hosted checks)
+- TASK-20261102-001 (ninth migration, reverse deploy window, capability probe)

@@ -16,7 +16,7 @@ related_files:
   - supabase/migrations/
   - README.md
   - .env.example
-updated: 2026-09-28
+updated: 2026-11-02
 ---
 
 # Summary
@@ -48,15 +48,16 @@ The bootstrap version of this entry described a local `data/db.json` store, in-p
 - **Participant re-join:** "다시 들어가기" restores a lost `cp_pid` with session code + team code + name. See `features/participant-rejoin.md`.
 - **Pages:**
   - Participant: `/`, `/join/[code]`, `/race`, `/t/[token]` (tags point at `/t/s?e=…&c=…`).
-  - Admin: `/admin/login`, `/admin`, `/admin/sessions/[id]` (includes the NFC tab), `/admin/sessions/[id]/ceremony`.
+  - Admin: `/admin/login`, `/admin`, `/admin/tags` (tag library, TASK-20261028-001), `/admin/sessions/[id]` (includes the NFC tab, with library attach/detach and the per-session route builder, TASK-20261102-001), `/admin/sessions/[id]/ceremony`.
   - `/t/[token]` is a server component.
-    - For SUN URLs (or non-token paths such as `/t/s`), a valid admin cookie gets the admin SUN panel (register / baseline refresh). Anyone else gets the participant landing.
-    - For a 10-character static token, the server looks up the token's session.
+    - For SUN URLs (or non-token paths such as `/t/s`), a valid admin cookie gets the admin SUN panel (register / baseline refresh / "목록에 등록"). Anyone else gets the participant landing.
+    - For a 10-character static token, the server resolves it with `resolve_static_token`: either a checkpoint's auto token (`tags.token`, never changed) or a static library token that may be attached to checkpoints in several sessions (`features/shared-checkpoint-routes.md`).
       - Admins get a read-only view.
-      - Participants get the static submit landing only when that session's switch is on. Otherwise they get the "SUN 정보가 없는" screen, which sends nothing.
+      - Participants get the static submit landing only when the token can credit: for a library token, when the participant's own session has it attached with the switch on (no cookie: any attached switch-on session); for an auto token, when its checkpoint has no library attachment and its session's switch is on. Otherwise they get the "SUN 정보가 없는" screen, which sends nothing.
 - **API routes:**
   - Participant: `join`, `rejoin`, `logout`, `me`, `tag`, `teams`, `teams/join`.
-  - Admin: `login`, `logout`, `realtime-token`, `sdm-key`, `sun/inspect`, `sessions`, `sessions/[id]`, `sessions/[id]/announcements`, `sessions/[id]/tags`, `sessions/[id]/tags/[tagId]`, `sessions/[id]/tags/[tagId]/sun`.
+  - Admin: `login`, `logout`, `realtime-token`, `sdm-key`, `sun/inspect`, `sessions`, `sessions/[id]`, `sessions/[id]/announcements`, `sessions/[id]/tags`, `sessions/[id]/tags/[tagId]`, `sessions/[id]/tags/[tagId]/sun`, `sessions/[id]/tags/[tagId]/library` (POST attach, DELETE per-checkpoint detach), `sessions/[id]/tags/from-library` (POST, add a checkpoint from a library entry at the route end), `sessions/[id]/tags/order` (PUT, full ordered id list), `library` (GET list, POST register/issue), `library/[libraryId]` (DELETE), `library/[libraryId]/release` (detach from all checkpoints).
+- **Tag library:** admins pre-register SUN tags (verified read + name) and static URL tags (app-issued token) in a session-independent list. One entry can be used by many sessions at once (one checkpoint per session), and each session builds its own route order from the list (draft/ready sessions only). See `features/tag-library.md` and `features/shared-checkpoint-routes.md`.
 - **Race rules:** order enforcement, one valid tag per team per checkpoint, finish detection and messages are enforced inside the DB functions (`record_sun_tag`, and `record_static_tag` for switch-on sessions, which has the same rules without the baseline). Ranking still uses `src/lib/race.ts`. `race.ts` `findTagByPayload` and the DB function `record_tag` (token path) remain but have no caller.
 - **Environment variables:** listed in `.env.example` (9 variables, no values). Only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` reach the browser.
 
@@ -100,6 +101,11 @@ Use hosted Supabase for state, DB-side atomic functions for every race write, po
 - For TASK-20260928-001 (static switch), Codex FINAL_REVIEW was APPROVED.
   - Local browser regression: 58 static checks, 76 SUN checks and 10 ceremony checks passed.
   - Hosted API: the static check passed 91 lines and SUN passed 57/57.
+- For TASK-20261028-001 (tag library), Codex FINAL_REVIEW was APPROVED.
+  - Local: API/SQL 146/146, browser 34/34 and 42/42.
+  - Hosted API: 42/42 with identical user-data digests.
+- For TASK-20261102-001 (shared library checkpoints, per-session routes), Codex FINAL_REVIEW was APPROVED.
+  - Local: API/SQL 162/162, browser 28/28 and 45/45. Hosted was not tested by agents in that Task.
 
 # Future Considerations
 
@@ -111,3 +117,5 @@ Use hosted Supabase for state, DB-side atomic functions for every race write, po
 - bootstrap (original map)
 - TASK-20260927-001 (current architecture)
 - TASK-20260928-001 (per-session static QR/URL switch)
+- TASK-20261028-001 (tag library and checkpoint matching)
+- TASK-20261102-001 (shared library checkpoints across sessions, per-session routes)

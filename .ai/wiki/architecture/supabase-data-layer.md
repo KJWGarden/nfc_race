@@ -13,9 +13,11 @@ related_files:
   - supabase/migrations/20260927160000_admin_login_attempts.sql
   - supabase/migrations/20260927170000_participant_rejoin.sql
   - supabase/migrations/20260928100000_static_tag_switch.sql
+  - supabase/migrations/20261028100000_tag_library.sql
+  - supabase/migrations/20261102100000_shared_tag_library.sql
   - supabase/seed.sql
   - supabase/config.toml
-updated: 2026-09-28
+updated: 2026-11-02
 ---
 
 # Summary
@@ -36,7 +38,10 @@ This layer replaced the `data/db.json` store, which relied on one in-process pro
 - **`store` contract:** method names, inputs and result shapes were kept from the JSON store, so route handlers did not change during the migration. All methods return Promises.
 - **Tables**
   - `sessions.allow_static_url` (boolean, not null, default false) is the per-session static QR/URL switch. It is mapped as `allowStaticUrl` with `=== true`, so reads are safe before the migration is applied. See `features/static-url-switch.md`.
-  - App tables: `sessions`, `tags`, `teams`, `participants`, `tag_events`, `announcements`, `sun_counters`, `admin_login_attempts`.
+  - App tables: `sessions`, `tags`, `teams`, `participants`, `tag_events`, `announcements`, `sun_counters`, `admin_login_attempts`, `tag_library` (TASK-20261028-001).
+  - `tags.library_id` (nullable text, FK → `tag_library(id)`, NO ACTION; TASK-20261102-001): the static library entry attached to this checkpoint. Unique per `(session_id, library_id)` (`tags_session_library_key`), so one entry can sit in many sessions, once per session. Mapped as `NfcTag.libraryId`; participant projections drop it. See `features/shared-checkpoint-routes.md`.
+  - `tags.original_token` (nullable text): introduced by TASK-20261028-001 for the token swap; since TASK-20261102-001 it is always null (CHECK `tags_original_token_unused`). `toTag` does not map it and `NfcTag` has no field for it.
+  - `tag_library`: `seq`, `id`, `kind ('sun'|'static')`, `name`, `uid`/`ctr`/`ctr_at` (SUN), `token` and `bound_tag_id → tags(id) on delete set null` (static; always null since TASK-20261102-001, CHECK `tag_library_bound_tag_unused`), `created_at`; a check constraint ties columns to the kind. It has RLS on, no policies, service_role grants only, and **no** `notify_admin_change` trigger (that trigger reads `session_id`, which this table lacks). See `features/tag-library.md`.
   - IDs are app-generated nanoid `text`.
 - **Ordering:** every original app table has a `seq bigint identity` column. Reads order by `seq` (plus `created_at` where relevant). This reproduces the old array insertion order for stable sorting and tie-breaks.
 - **Cascades:** a session deletes all its children; a team deletes its participants and events; a tag deletes its events. `sun_counters` has no foreign key on purpose, so a used URL stays dead after its session is deleted.
@@ -45,15 +50,22 @@ This layer replaced the `data/db.json` store, which relied on one in-process pro
   - `tag_events_one_valid (team_id, tag_id) where valid`.
   - `tags_session_uid (session_id, upper(uid)) where uid <> ''`.
   - `participants_team_name_uniq (team_id, normalize_name(name)) where team_id is not null`.
-  - On a generated-code collision (session code, join code, tag token), the app retries with a new code up to 5 times.
-- **Atomic functions:** `record_sun_tag`, `record_static_tag` (TASK-20260928-001), `register_tag_sun`, `create_team`, `join_team`, `create_announcement`, `create_tag`, `admin_login_attempt`, `admin_login_success`, `rejoin_lookup`.
+  - `tags_original_token_key (lower(original_token)) where not null`; `tag_library` unique on `upper(uid)` (SUN), `lower(token)`, and `bound_tag_id` (now unused).
+  - `tags_session_library_key (session_id, library_id) where library_id is not null` (one checkpoint per session per static entry).
+  - On a generated-code collision (session code, join code, tag token, library token), the app retries with a new code up to 5 times.
+- **Token-uniqueness trigger `tags_token_guard`** (`BEFORE INSERT OR UPDATE OF token, original_token ON tags`): keeps every token value unique across `tags.token`, `tags.original_token` and `tag_library.token`. Since TASK-20261102-001 no `tags.token` may equal a library token at all (no bound exception remains). It takes per-token `pg_advisory_xact_lock(hashtext('cp-token:'||lower(token)))` for both values in ascending hash order and raises `unique_violation`, which `create_tag` already maps to `{retry:true}`. Any new writer of `tags.token` goes through it.
+- **Atomic functions:** `record_sun_tag`, `record_static_tag` (TASK-20260928-001), `register_tag_sun`, `create_team`, `join_team`, `create_announcement`, `create_tag`, `admin_login_attempt`, `admin_login_success`, `rejoin_lookup`, and the tag library functions (TASK-20261028-001): `upsert_library_sun`, `issue_library_static`, `match_library` (dispatcher; SUN calls `register_tag_sun`), `match_library_static`, `release_library_static`, `delete_library_entry`; and (TASK-20261102-001) `detach_library_tag`, `add_tag_from_library`, `reorder_session_tags`, plus read-only `resolve_static_token` and the capability probe `shared_library_schema()`.
   - They lock the relevant row (`for update`, usually the team row) so concurrent requests from one team serialize.
+  - Library binding and route functions use a fixed lock order: global advisory lock `cp-library-binding` → `sessions` row (only where needed) → `tags` rows by `id` → `tag_library` rows by `id` → per-token advisory locks in the trigger. It matches `create_tag` and the delete cascade order, which avoids deadlocks.
+  - **Use `FOR NO KEY UPDATE`, not `FOR UPDATE`, when locking `sessions`/`tags` rows whose key is not changed.** A `tag_events` insert takes FK `FOR KEY SHARE` on its `sessions` and `tags` rows; `FOR UPDATE` conflicts with that, so a participant tap waited behind an admin reorder in TASK-20261102-001 testing. Binding/route functions now lock `tags` and (reorder) `sessions` with `FOR NO KEY UPDATE`. `create_tag` and `add_tag_from_library` still take `sessions FOR UPDATE`.
   - They return Korean user-facing messages identical to the old JS validation.
 - **Whole-view reads**
   - `get_team_race_data(participant)`: `/api/me`, and the `/api/tag` response.
   - `get_admin_live_data(session)`: the admin live view.
   - `get_sun_admin_context(uid)`: admin SUN mode.
-  - One exception is a small read in `store.getStaticTagInfo(token)`. It is a single-row `maybeSingle()` select of a tag plus its embedded session (`name,status,allow_static_url`), used only by the `/t/[token]` server component.
+  - `get_library()`: the whole tag library with current bindings; `get_library_entry_by_uid(uid)`: one SUN entry summary for inspect.
+  - `resolve_static_token(token)` (TASK-20261102-001): `/t/[token]` routing data for a library static token (all bindings) or a checkpoint auto token.
+  - One exception is a small read in `store.getStaticTagInfo(token)`. It is a single-row `maybeSingle()` select of a tag plus its embedded session (`name,status,allow_static_url`); since TASK-20261102-001 it is only the `/t` fallback when `resolve_static_token` is missing (pre-migration schema).
   - Each returns one `jsonb`. Ranking and team views are then computed in `src/lib/race.ts` (`computeRankings`, `buildTeamRaceView`).
 - **Timestamps:** PostgREST `timestamptz` values (microseconds, `+00:00`) are normalized with `new Date(v).toISOString()`. This keeps API shapes and string sorting identical to the old store. Most timestamps come from the DB clock; `updateSession` still stamps `startedAt`/`finishedAt` from Node.
 - **Privileges**
@@ -91,9 +103,9 @@ This layer replaced the `data/db.json` store, which relied on one in-process pro
 
 # Related Files
 
-- `src/lib/db.ts` (`store`, `check()` RPC helper, row mappers)
+- `src/lib/db.ts` (`store`, `check()` RPC helper, row mappers, `FUNCTION_NOT_FOUND`, `LIBRARY_UNAVAILABLE` + `libraryRpc` + `requireSharedLibrary()` for the library deploy window)
 - `src/lib/supabase-server.ts`
-- `supabase/migrations/*.sql` (seven files, applied in file-name order; the seventh is `20260928100000_static_tag_switch.sql`)
+- `supabase/migrations/*.sql` (nine files, applied in file-name order; the ninth is `20261102100000_shared_tag_library.sql`)
 - `supabase/seed.sql`, `supabase/config.toml`
 
 # Validation
@@ -106,6 +118,8 @@ This layer replaced the `data/db.json` store, which relied on one in-process pro
   - Duplicate-name joins raced 5 rounds with exactly one success each.
 - Session delete cascade went from `1,3,2,21,66,2` child rows to `0,0,0,0,0,0`.
 - After build, the service key and other server secrets had 0 hits in `.next/static`.
+- TASK-20261028-001: catalog checks for `tag_library` (RLS on, 0 policies, anon 42501, EXECUTE only for service_role), trigger and `create_tag` retry cases, and deterministic two-connection checks of the advisory-lock interleavings (no deadlock) passed locally (`.ai/tasks/archive/TASK-20261028-001/runtime/web/FINAL/api-check.out.txt`, 146/146).
+- TASK-20261102-001: catalog checks for the new/replaced functions (anon 42501, EXECUTE only for service_role), the swapped-binding data migration, two-connection concurrency checks (no deadlock; taps do not wait on attach/reorder locks) and invariants passed locally (`.ai/tasks/archive/TASK-20261102-001/runtime/web/FINAL/api-check.out.txt`, 162/162).
 
 # Future Considerations
 
@@ -116,3 +130,5 @@ This layer replaced the `data/db.json` store, which relied on one in-process pro
 
 - TASK-20260927-001 (TODO-001, extended by TODO-003 to TODO-006)
 - TASK-20260928-001 (`allow_static_url`, `record_static_tag`, `getStaticTagInfo`)
+- TASK-20261028-001 (`tag_library`, `tags.original_token`, `tags_token_guard`, library functions)
+- TASK-20261102-001 (`tags.library_id`, route functions, `resolve_static_token`, `shared_library_schema`, NO KEY UPDATE lock finding)

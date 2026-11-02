@@ -2,11 +2,15 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import type {
   AdminLiveView,
   Announcement,
+  LibraryEntry,
+  LibraryEntryRef,
+  LibraryList,
   NfcTag,
   Participant,
   Session,
   SessionStatus,
   StaticTagInfo,
+  StaticTokenInfo,
   SunAdminContext,
   TagEvent,
   Team,
@@ -61,6 +65,8 @@ function toTag(r: Row): NfcTag {
     createdAt: iso(r.created_at),
     baselineCounter: (r.baseline_ctr as number | null | undefined) ?? null,
     baselineAt: isoOrNull(r.baseline_at),
+    // 기능: 마이그레이션 적용 전(컬럼 없음)에는 null
+    libraryId: (r.library_id as string | null | undefined) ?? null,
   };
 }
 
@@ -136,6 +142,77 @@ const UNIQUE_VIOLATION = "23505";
 const MAX_CODE_ATTEMPTS = 5;
 // PostgREST 스키마 캐시에 없는 함수(PGRST202) / Postgres 에 없는 함수(42883)
 const FUNCTION_NOT_FOUND = ["PGRST202", "42883"];
+// 기능: 태그 목록 마이그레이션 적용 전에는 함수(PGRST202/42883)나 테이블(PGRST205/42P01)이 없다
+const LIBRARY_UNAVAILABLE = [...FUNCTION_NOT_FOUND, "PGRST205", "42P01"];
+const LIBRARY_UNAVAILABLE_ERROR = "태그 목록 기능을 사용하려면 DB 업데이트가 필요합니다.";
+
+// 기능: 태그 목록 작업 결과. 실패는 라우트가 그대로 HTTP 응답으로 바꾼다
+export type LibraryFailure = { ok: false; status: number; error: string; needsConfirm: boolean };
+export type LibraryResult<T> = { ok: true; value: T } | LibraryFailure;
+
+const LIBRARY_UNAVAILABLE_RESULT: LibraryFailure = {
+  ok: false,
+  status: 503,
+  error: LIBRARY_UNAVAILABLE_ERROR,
+  needsConfirm: false,
+};
+
+// 기능: 목록 RPC 호출. DB 업데이트 전이면 unavailable, 함수가 {ok:false} 를 돌려주면 실패 결과로 변환한다
+async function libraryRpc(
+  fn: string,
+  args?: Record<string, unknown>,
+): Promise<{ unavailable: true } | { unavailable: false; data: Row | null }> {
+  const result = await getSupabase().rpc(fn, args);
+  if (result.error && LIBRARY_UNAVAILABLE.includes(result.error.code)) {
+    return { unavailable: true };
+  }
+  return { unavailable: false, data: check(result) as Row | null };
+}
+
+function toLibraryFailure(data: Row): LibraryFailure {
+  return {
+    ok: false,
+    status: data.status as number,
+    error: data.error as string,
+    needsConfirm: data.needsConfirm === true,
+  };
+}
+
+// 기능: get_library / upsert 결과 jsonb 를 LibraryEntry 로 변환 (타임스탬프는 iso 형식으로 정규화)
+function toLibraryEntry(r: Row): LibraryEntry {
+  return {
+    id: r.id as string,
+    kind: r.kind as "sun" | "static",
+    name: r.name as string,
+    uid: (r.uid as string | null) ?? null,
+    counter: (r.counter as number | null) ?? null,
+    counterAt: isoOrNull(r.counterAt),
+    token: (r.token as string | null) ?? null,
+    createdAt: iso(r.createdAt),
+    // 변경: SUN·고정 URL 모두 연결된 지점 목록 하나로 읽는다
+    bindings: rows(r.bindings).map((b) => ({
+      sessionId: b.sessionId as string,
+      sessionName: b.sessionName as string,
+      sessionStatus: b.sessionStatus as SessionStatus,
+      allowStaticUrl: b.allowStaticUrl === true,
+      tagId: b.tagId as string,
+      tagName: b.tagName as string,
+      order: b.order as number,
+      baselineCtr: (b.baselineCtr as number | null) ?? null,
+    })),
+  };
+}
+
+// 기능: 공유 태그 목록 마이그레이션(20261102100000) 적용 여부. 성공했을 때만 프로세스 안에서 기억한다
+let sharedLibraryReady = false;
+
+async function requireSharedLibrary(): Promise<LibraryFailure | null> {
+  if (sharedLibraryReady) return null;
+  const result = await libraryRpc("shared_library_schema");
+  if (result.unavailable) return LIBRARY_UNAVAILABLE_RESULT;
+  sharedLibraryReady = true;
+  return null;
+}
 
 function toTeamRaceView(data: Row | null): TeamRaceView | null {
   if (!data) return null;
@@ -593,6 +670,209 @@ export const store = {
           baselineCtr: (t.baselineCtr as number | null) ?? null,
         })),
       })),
+    };
+  },
+
+  // 기능: 태그 목록 전체와 현재 연결 상태. DB 업데이트 전이면 available=false 의 빈 목록
+  async listLibrary(): Promise<LibraryList> {
+    // 변경: 공유 목록 스키마가 아니면(구 스키마 포함) 목록 기능을 끈다
+    if (await requireSharedLibrary()) return { available: false, entries: [] };
+    const result = await libraryRpc("get_library");
+    if (result.unavailable) return { available: false, entries: [] };
+    return { available: true, entries: rows(result.data?.entries).map(toLibraryEntry) };
+  },
+
+  // 기능: 검증된 SUN 읽기(uid, ctr)와 이름으로 목록에 등록한다. 같은 UID 면 이름·카운터(최댓값)만 갱신
+  async registerLibrarySun(input: {
+    uid: string;
+    ctr: number;
+    name: string;
+  }): Promise<LibraryResult<LibraryEntry>> {
+    // 변경: 모든 목록 쓰기는 공유 목록 스키마 확인 후에만 실행한다 (구 스키마면 503)
+    const unavailable = await requireSharedLibrary();
+    if (unavailable) return unavailable;
+    const result = await libraryRpc("upsert_library_sun", {
+      p_id: createId(),
+      p_uid: input.uid,
+      p_ctr: input.ctr,
+      p_name: input.name,
+      p_rename: true,
+    });
+    if (result.unavailable) return LIBRARY_UNAVAILABLE_RESULT;
+    return { ok: true, value: toLibraryEntry(result.data as Row) };
+  },
+
+  // 기능: 이름으로 고정 URL 태그를 발급한다 (새 토큰, 충돌 시 재시도)
+  async issueLibraryStatic(name: string): Promise<LibraryResult<LibraryEntry>> {
+    const unavailable = await requireSharedLibrary();
+    if (unavailable) return unavailable;
+    for (let attempt = 0; ; attempt++) {
+      const result = await libraryRpc("issue_library_static", {
+        p_id: createId(),
+        p_name: name,
+        p_token: createTagToken(),
+      });
+      if (result.unavailable) return LIBRARY_UNAVAILABLE_RESULT;
+      const data = result.data as Row;
+      if (data.retry) {
+        if (attempt + 1 < MAX_CODE_ATTEMPTS) continue;
+        throw new Error("태그 토큰 생성에 실패했습니다.");
+      }
+      return { ok: true, value: toLibraryEntry(data) };
+    }
+  },
+
+  // 기능: 목록 태그 삭제 (SUN 은 언제든, 고정 URL 은 어느 지점에도 연결되지 않았을 때만)
+  async deleteLibraryEntry(libraryId: string): Promise<LibraryResult<null>> {
+    const unavailable = await requireSharedLibrary();
+    if (unavailable) return unavailable;
+    const result = await libraryRpc("delete_library_entry", { p_library_id: libraryId });
+    if (result.unavailable) return LIBRARY_UNAVAILABLE_RESULT;
+    const data = result.data as Row;
+    return data.ok ? { ok: true, value: null } : toLibraryFailure(data);
+  },
+
+  // 변경: 목록 태그를 지점에 연결 (SUN 은 register_tag_sun 규칙, 고정 URL 은 library_id 연결). 종류는 DB 함수가 구분한다
+  async matchLibrary(input: {
+    sessionId: string;
+    tagId: string;
+    libraryId: string;
+    replace: boolean;
+  }): Promise<LibraryResult<NfcTag>> {
+    const unavailable = await requireSharedLibrary();
+    if (unavailable) return unavailable;
+    const result = await libraryRpc("match_library", {
+      p_session_id: input.sessionId,
+      p_tag_id: input.tagId,
+      p_library_id: input.libraryId,
+      p_replace: input.replace,
+    });
+    if (result.unavailable) return LIBRARY_UNAVAILABLE_RESULT;
+    const data = result.data as Row;
+    return data.ok ? { ok: true, value: toTag(data.tag as Row) } : toLibraryFailure(data);
+  },
+
+  // 변경: 고정 URL 태그를 모든 세션·지점에서 연결 해제. 연결이 없었으면 released=false
+  async releaseLibrary(libraryId: string): Promise<LibraryResult<{ released: boolean; count: number }>> {
+    const unavailable = await requireSharedLibrary();
+    if (unavailable) return unavailable;
+    const result = await libraryRpc("release_library_static", { p_library_id: libraryId });
+    if (result.unavailable) return LIBRARY_UNAVAILABLE_RESULT;
+    const data = result.data as Row;
+    if (!data.ok) return toLibraryFailure(data);
+    return { ok: true, value: { released: data.released === true, count: (data.count as number) ?? 0 } };
+  },
+
+  // 기능: 지점 하나의 고정 URL 목록 태그 연결 해제 (다른 세션·지점 연결은 그대로)
+  async detachLibraryTag(
+    sessionId: string,
+    tagId: string,
+  ): Promise<LibraryResult<{ detached: boolean; tag: NfcTag }>> {
+    const unavailable = await requireSharedLibrary();
+    if (unavailable) return unavailable;
+    const result = await libraryRpc("detach_library_tag", { p_session_id: sessionId, p_tag_id: tagId });
+    if (result.unavailable) return LIBRARY_UNAVAILABLE_RESULT;
+    const data = result.data as Row;
+    if (!data.ok) return toLibraryFailure(data);
+    return { ok: true, value: { detached: data.detached === true, tag: toTag(data.tag as Row) } };
+  },
+
+  // 기능: 목록 태그로 지점을 만들어 경로 끝에 붙이고 연결 (한 트랜잭션, 토큰·id 충돌 시 재시도)
+  async addTagFromLibrary(
+    sessionId: string,
+    input: { libraryId: string; hint: string; nextHint: string; locationNote: string },
+  ): Promise<LibraryResult<NfcTag>> {
+    const unavailable = await requireSharedLibrary();
+    if (unavailable) return unavailable;
+    for (let attempt = 0; ; attempt++) {
+      const result = await libraryRpc("add_tag_from_library", {
+        p_session_id: sessionId,
+        p_id: createId(),
+        p_token: createTagToken(),
+        p_library_id: input.libraryId,
+        p_hint: input.hint,
+        p_next_hint: input.nextHint,
+        p_location_note: input.locationNote,
+      });
+      if (result.unavailable) return LIBRARY_UNAVAILABLE_RESULT;
+      const data = result.data as Row;
+      if (data.retry) {
+        if (attempt + 1 < MAX_CODE_ATTEMPTS) continue;
+        throw new Error("태그 토큰 생성에 실패했습니다.");
+      }
+      return data.ok ? { ok: true, value: toTag(data.tag as Row) } : toLibraryFailure(data);
+    }
+  },
+
+  // 기능: 세션 경로 순서 변경. 현재 지점 id 전체를 새 순서대로 받는다
+  async reorderTags(sessionId: string, tagIds: string[]): Promise<LibraryResult<null>> {
+    const unavailable = await requireSharedLibrary();
+    if (unavailable) return unavailable;
+    const result = await libraryRpc("reorder_session_tags", { p_session_id: sessionId, p_tag_ids: tagIds });
+    if (result.unavailable) return LIBRARY_UNAVAILABLE_RESULT;
+    const data = result.data as Row;
+    return data.ok ? { ok: true, value: null } : toLibraryFailure(data);
+  },
+
+  // 기능: /t 화면 분기용 고정 토큰 조회. 공유 목록 스키마가 아니면 기존 단일 지점 조회로 대신한다
+  async resolveStaticToken(token: string): Promise<StaticTokenInfo | StaticTagInfo | null> {
+    const result = await libraryRpc("resolve_static_token", { p_token: token });
+    if (result.unavailable) return store.getStaticTagInfo(token);
+    const data = result.data;
+    if (!data) return null;
+    if (data.kind === "library") {
+      return {
+        kind: "library",
+        name: data.name as string,
+        bindings: rows(data.bindings).map((b) => ({
+          sessionId: b.sessionId as string,
+          sessionName: b.sessionName as string,
+          sessionStatus: b.sessionStatus as SessionStatus,
+          allowStaticUrl: b.allowStaticUrl === true,
+          tagId: b.tagId as string,
+          tagName: b.tagName as string,
+          order: b.order as number,
+        })),
+      };
+    }
+    return {
+      kind: "checkpoint",
+      tagName: data.tagName as string,
+      order: data.order as number,
+      sessionId: data.sessionId as string,
+      sessionName: data.sessionName as string,
+      sessionStatus: data.sessionStatus as SessionStatus,
+      allowStaticUrl: data.allowStaticUrl === true,
+      attached: data.attached === true,
+      libraryName: (data.libraryName as string | null) ?? null,
+    };
+  },
+
+  // 기능: 직접 등록 성공 뒤 목록에 추가·갱신한다. 실패해도 등록 응답에 영향이 없도록 절대 던지지 않는다
+  async autoAddLibrarySun(input: { uid: string; ctr: number; name: string }): Promise<void> {
+    try {
+      // 변경: 공유 목록 스키마가 아니면 목록 쓰기 없이 건너뛴다
+      if (await requireSharedLibrary()) return;
+      await libraryRpc("upsert_library_sun", {
+        p_id: createId(),
+        p_uid: input.uid,
+        p_ctr: input.ctr,
+        p_name: input.name,
+        p_rename: false,
+      });
+    } catch (error) {
+      console.error("태그 목록 자동 추가 실패", error instanceof Error ? error.message : error);
+    }
+  },
+
+  // 기능: 관리자 모드(/t) 조회용. UID 가 목록에 있으면 요약을, 없거나 DB 업데이트 전이면 null
+  async getLibraryEntryByUid(uid: string): Promise<LibraryEntryRef | null> {
+    const result = await libraryRpc("get_library_entry_by_uid", { p_uid: uid });
+    if (result.unavailable || !result.data) return null;
+    return {
+      id: result.data.id as string,
+      name: result.data.name as string,
+      counter: result.data.counter as number,
     };
   },
 

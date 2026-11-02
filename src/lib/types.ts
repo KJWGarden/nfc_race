@@ -29,6 +29,8 @@ export interface NfcTag {
   // 변경: SUN 기준 카운터와 갱신 시각 (미등록·기준 미설정이면 null)
   baselineCounter: number | null;
   baselineAt: string | null;
+  // 기능: 이 지점에 연결된 고정 URL 목록 태그 id (관리자 전용, 참가자 응답에는 담지 않는다)
+  libraryId: string | null;
 }
 
 export interface Team {
@@ -133,6 +135,23 @@ export interface StaticTagInfo {
   allowStaticUrl: boolean;
 }
 
+// 기능: /t 화면 분기용 고정 토큰 조회 결과 (서버 컴포넌트 전용). 목록 고정 URL 토큰 또는 지점 자동 토큰.
+export type StaticTokenInfo =
+  | {
+      kind: "library";
+      name: string;
+      bindings: {
+        sessionId: string;
+        sessionName: string;
+        sessionStatus: SessionStatus;
+        allowStaticUrl: boolean;
+        tagId: string;
+        tagName: string;
+        order: number;
+      }[];
+    }
+  | ({ kind: "checkpoint"; attached: boolean; libraryName: string | null } & StaticTagInfo);
+
 // 기능: 관리자 모드(/t) SUN 조회 결과. UID·카운터·기준값만 담고 키는 담지 않는다.
 export interface SunAdminContext {
   uid: string;
@@ -153,4 +172,45 @@ export interface SunAdminContext {
     status: SessionStatus;
     tags: { id: string; name: string; order: number; uid: string; baselineCtr: number | null }[];
   }[];
+  // 변경: 태그 목록 항목 (목록에 없으면 null, 구버전 서버 응답이면 undefined)
+  library?: LibraryEntryRef | null;
+}
+
+// 기능: 태그 목록(관리자 전용). 참가자 응답에는 절대 담지 않는다.
+// 변경: SUN(UID 로 묶인 지점)과 고정 URL(library_id 로 연결된 지점) 모두 같은 연결 형태를 쓴다
+export interface LibraryBinding {
+  sessionId: string;
+  sessionName: string;
+  sessionStatus: SessionStatus;
+  allowStaticUrl: boolean;
+  tagId: string;
+  tagName: string;
+  order: number;
+  // SUN 지점의 기준 카운터 (고정 URL 은 null)
+  baselineCtr: number | null;
+}
+
+export interface LibraryEntry {
+  id: string;
+  kind: "sun" | "static";
+  name: string;
+  uid: string | null;
+  counter: number | null;
+  counterAt: string | null;
+  token: string | null;
+  createdAt: string;
+  // 변경: 이 태그가 연결된 모든 세션·지점 (여러 세션에서 동시에 사용)
+  bindings: LibraryBinding[];
+}
+
+export interface LibraryList {
+  available: boolean;
+  entries: LibraryEntry[];
+}
+
+// 기능: 관리자 모드(/t) 조회 응답에 붙는 목록 항목 요약
+export interface LibraryEntryRef {
+  id: string;
+  name: string;
+  counter: number;
 }

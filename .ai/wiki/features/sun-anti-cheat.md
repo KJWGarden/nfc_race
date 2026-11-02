@@ -19,9 +19,10 @@ related_files:
   - src/lib/tag-result.ts
   - supabase/migrations/20260927140000_sun.sql
   - supabase/migrations/20260927150000_sun_register.sql
+  - supabase/migrations/20261028100000_tag_library.sql
   - tests/sun.test.ts
   - scripts/sun-url.ts
-updated: 2026-09-28
+updated: 2026-11-02
 ---
 
 # Summary
@@ -79,16 +80,20 @@ L2 (minimum travel time) was not chosen.
   - A lower counter for the same UID → 409. The baseline never decreases.
   - Registration inserts no `sun_counters` row. `ctr > baseline` makes the registration URL itself, and every older URL, invalid for participants.
   - The same UID may be bound in several sessions.
+  - **Auto-add to the tag library (TASK-20261028-001):** after a successful direct registration or baseline refresh, the route calls `store.autoAddLibrarySun` (UID, verified counter, checkpoint name). A new library entry is named after the checkpoint; an existing one keeps its name, and its counter becomes `max(stored, ctr)`. The call never throws and the route response is unchanged; a failed registration writes no library row. See `features/tag-library.md`.
+  - **Library matching** binds a UID by calling `register_tag_sun` with the library entry's stored UID and counter, so all rules above apply unchanged, with the library counter as the baseline.
 - **Admin mode on `/t`**
   - The server component checks `isAdmin()` (HMAC). For SUN URLs it renders only `AdminSunPanel`. For static 10-character tokens it renders the read-only `AdminStaticView`. The participant component is never mounted, so no `/api/tag` call and no `pendingTag` happen even when `cp_pid` exists.
   - On load it calls `POST /api/admin/sun/inspect` (read-only) and shows the UID's bindings and baseline, with a warning for live sessions.
+    - Inspect also returns `library: {id, name, counter} | null` (null when the UID is not listed or the library migration is missing). The panel shows "태그 목록: <name>" or "태그 목록에 없음".
   - It offers "기준 갱신", or session and checkpoint pickers with "등록", and a replace confirmation.
+  - It offers "목록에 등록" with a name, which registers or renames the tag in the library (`features/tag-library.md`). Inspect itself never updates the library counter.
   - It shows an admin banner and a logout button.
   - It works on iPhone because iOS opens the tag URL in the default browser. The admin must be logged in in that browser.
 - **Admin NFC tab**
   - Shows the SDM URL template `<origin>/t/s?e=<32 zeros>&c=<16 zeros>` and computed offsets.
   - "키 보기" calls `GET /api/admin/sdm-key?uid=` (admin-only, no-store) to show the per-UID file read key.
-  - Per tag it offers paste-URL register / baseline refresh, "NFC로 읽기" (only where `NDEFReader` exists, i.e. Android Chrome), and delete.
+  - Per tag it offers paste-URL register / baseline refresh, "NFC로 읽기" (only where `NDEFReader` exists, i.e. Android Chrome), "목록에서 연결" (library matching), and delete.
   - Admin APIs can no longer bind a UID without a SUN read. Tag PATCH/POST ignore `uid`.
   - The tab also holds the per-session "고정 QR/URL 허용" switch. When it is on, the tab shows each checkpoint's static URL and QR code (`features/static-url-switch.md`).
 - **`/api/tag` UID path:** a `{uid}`-only body is always rejected with 400, whatever the switch state. No crediting path uses a UID without a SUN read.
@@ -113,6 +118,8 @@ L2 (minimum travel time) was not chosen.
   - Someone physically at a checkpoint can tap repeatedly and relay fresh URLs.
   - Team members spread across checkpoints are not detected (no L2).
   - A baseline refresh mid-race invalidates unsubmitted older URLs. It is warned about, not blocked.
+  - A checkpoint matched from the tag library starts with the library counter as its baseline, which can be older than the tag's real counter. URLs read in between stay valid until a baseline refresh, so the refresh right before the race remains required.
+  - Since TASK-20261102-001 one physical SUN tag can be in several sessions' routes. The gap grows after another session's race (the library counter only moves on admin reads), so refresh baselines right before **each** session's race. Used `(uid, ctr)` pairs stay rejected globally across sessions (`features/shared-checkpoint-routes.md`).
 - **Unverified on hardware:**
   - The NDEF PICCData/SDMMAC offsets shown in the NFC tab are computed (7 + index after the scheme) and must be confirmed with the first programmed tag.
   - Key diversification and the SDM configuration were verified against AN12196 vectors only, not on a physical tag.
@@ -160,3 +167,5 @@ L2 (minimum travel time) was not chosen.
 
 - TASK-20260927-001 (TODO-003, TODO-004)
 - TASK-20260928-001: added the per-session static switch. SUN behavior is unchanged and passed regression locally and on hosted.
+- TASK-20261028-001: tag library. Direct registration auto-adds to the library; inspect returns `library`; `record_sun_tag` and `register_tag_sun` are unchanged (`npm run test:sun` 11/11, SUN regression in the local API check and hosted 42/42).
+- TASK-20261102-001: one SUN library entry shared by several sessions (via add-from-library / matching); taps credit each session's own checkpoint and a counter used in one session is rejected in another. SUN verification and `sun_counters` unchanged (`npm run test:sun` 11/11).

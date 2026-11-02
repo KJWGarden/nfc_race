@@ -18,7 +18,9 @@ related_files:
   - src/app/race/page.tsx
   - src/app/admin/sessions/[id]/ui.tsx
   - README.md
-updated: 2026-09-28
+  - supabase/migrations/20261028100000_tag_library.sql
+  - supabase/migrations/20261102100000_shared_tag_library.sql
+updated: 2026-11-02
 ---
 
 # Summary
@@ -54,7 +56,7 @@ updated: 2026-09-28
     2. No team → '먼저 팀에 참가해 주세요.'.
     3. Lock the team row (`for update`).
     4. **Re-read the session after the lock.** If the switch is now off, return the same disabled result.
-    5. Look up the tag with `session_id = participant's session` and `lower(token) = lower(btrim(p_token))`. If it is not found (an unknown token or a token from another session), return '등록되지 않은 NFC 태그입니다.' and **insert no event**.
+    5. Look up the tag inside the participant's session. Since TASK-20261102-001 (function replaced in `20261102100000_shared_tag_library.sql`, same signature): (a) a library static token → this session's checkpoint attached to that entry (`tags.library_id`); (b) otherwise a checkpoint auto token (`lower(token)`) of this session whose checkpoint has no static attachment. If neither is found (an unknown token, a token from another session, or the auto token of an attached checkpoint), return '등록되지 않은 NFC 태그입니다.' and **insert no event**.
     6. Apply the same race rules and messages as `record_sun_tag`: live → no tags → duplicate → finished → order. There is no baseline step.
     7. Insert the event and stamp `started_at`/`finished_at`. The result keys match `record_sun_tag`, so `toRecordTagResult` is reused.
   - The function has **no UID path** and never touches `sun_counters` or the baseline.
@@ -75,11 +77,13 @@ updated: 2026-09-28
   - A toggle refreshes admin screens through the existing `sessions` Realtime trigger.
 - **`/t/[token]` routing (server component)**
   - Valid SUN `e`/`c`, or a token that is not 10 alphanumeric characters (for example `/t/s`) → the existing SUN screens (`AdminSunPanel` / `ParticipantTagLanding`).
-  - Otherwise the page calls `store.getStaticTagInfo(token)` inside a try/catch. A DB error or a missing migration gives null.
-    - Admin cookie (HMAC) → `AdminStaticView`, a read-only view. It shows the checkpoint, session, status and switch state, or "등록되지 않은 태그입니다." for an unknown token. It makes no API calls, writes no sessionStorage and mounts no participant code, even when `cp_pid` exists.
-    - Participant, and the **token's** session has the switch on → `ParticipantStaticLanding`. It receives only the lowercased token that is already in the URL (no tag names, session names or ids).
+  - Otherwise the page calls `store.resolveStaticToken(token)` (RPC `resolve_static_token`, TASK-20261102-001) inside a try/catch; on the pre-migration schema it falls back to the old single-row `getStaticTagInfo(token)`. A DB error gives null.
+    - Admin cookie (HMAC) → `AdminStaticView`, a read-only view: a checkpoint token shows the checkpoint, session, status and switch state (plus "목록 태그가 연결되어 있어 이 URL은 인정되지 않습니다" when a library entry is attached); a library token lists every attached session/checkpoint or "연결된 지점 없음"; unknown → "등록되지 않은 태그입니다.". It makes no API calls, writes no sessionStorage and mounts no participant code, even when `cp_pid` exists.
+    - Checkpoint token, not attached, and the **token's** session has the switch on → `ParticipantStaticLanding`. An attached checkpoint's auto token never lands.
+    - Library token → landing only if the **participant's own** session (from the signed `cp_pid`) has a checkpoint attached to it with the switch on; with no cookie, if any attached session has the switch on (the server decides after join). Full rules: `features/shared-checkpoint-routes.md`.
+    - The landing receives only the lowercased token that is already in the URL (no tag names, session names or ids).
     - Otherwise → the existing "SUN 정보가 없는 태그입니다…" screen. It sends nothing and stores no `pendingTag`.
-  - The page decides by the token's session. `/api/tag` decides by the participant's session. A switch-on token opened by a participant in a switch-off session therefore gets "태그 정보가 없습니다." from the server.
+  - `/api/tag` always decides by the participant's session. For a checkpoint auto token the page still decides by the token's session, so a switch-on token opened by a participant in a switch-off session gets "태그 정보가 없습니다." from the server.
 - **Participant static landing**
   - Uses the same flow as SUN, through the shared helper `submitTagPayload`.
     - No team → `sessionStorage.pendingTag = {"token":…}` → `/race`.
@@ -96,10 +100,21 @@ updated: 2026-09-28
   - A checkbox labelled "고정 QR/URL 허용 (이 세션)" sends PATCH `{allowStaticUrl}`. It has no optimistic update and is disabled while saving.
   - A copy/share warning is always visible (`data-testid="static-warning"`).
   - When the switch is on, each checkpoint row shows:
-    - `${window.location.origin}/t/${token}` (`data-testid="static-url-N"`);
+    - `${window.location.origin}/t/${token}` (`data-testid="static-url-N"`); for a checkpoint with an attached static library entry the URL uses the **library** token instead (hidden when the library list is not loaded; TASK-20261102-001);
     - a "URL 복사" button;
     - a QR code (`QrImage`).
   - When the switch is off, none of these render.
+- **Shared static library entries (TASK-20261102-001, current)**
+  - A static library entry is attached per checkpoint (`tags.library_id`), to many sessions at once, at most one checkpoint per session. `tags.token` never changes.
+  - While attached, only the library URL credits that checkpoint, resolved in the participant's session; the checkpoint's own auto URL credits nothing. After detach the auto URL credits again.
+  - The switch rules are unchanged: an attachment in a switch-off session credits nothing.
+  - Details: `features/shared-checkpoint-routes.md`.
+- **Token replacement by a tag library match (TASK-20261028-001) — superseded by the item above, kept as history**
+  - While a static library entry is matched to a checkpoint, that checkpoint's `tags.token` **is** the library token, and its own auto-issued token is saved in `tags.original_token`. On release, or when the entry moves to another checkpoint (after a confirmation), the original is restored and `original_token` is cleared. Printed checkpoint QR codes then work again.
+  - While matched, only the library URL credits; the saved original credits nothing (`/t/{original}` shows "SUN 정보가 없는 태그입니다…" and sends nothing; `/api/tag` returns "등록되지 않은 NFC 태그입니다." with no event).
+  - `record_static_tag`, `getStaticTagInfo`, `/t` routing and the NFC tab URL/QR read `tags.token` and were not changed; they follow the swap automatically.
+  - The switch rules are unchanged: a static match in a switch-off session is stored but credits nothing.
+  - Details, uniqueness trigger and lock order: `features/tag-library.md`.
 - **Leak surface**
   - The only new participant-visible field is the boolean `view.session.allowStaticUrl`. `/api/join` also returns it as part of the full `Session`.
   - Participant responses from `/api/me`, `/api/tag` and `/api/join`, and the `/race` HTML, contain no tag tokens, UIDs or key material.
@@ -122,7 +137,7 @@ updated: 2026-09-28
 - **Deploy order:** apply `20260928100000_static_tag_switch.sql` on hosted (in the SQL Editor) **before** deploying app code that depends on it. README documents this. It was applied on hosted during this Task.
 - **Residual risks, accepted and documented in README:**
   - **Copy/share bypass:** in a switch-on session, any photographed or shared QR/URL credits the checkpoint without being there.
-  - **No token rotation:** a leaked URL stays valid while the switch is on. Turning the switch on also revives any static QR codes printed earlier for that session's tags.
+  - **No token rotation:** a leaked URL stays valid while the switch is on. Turning the switch on also revives any static QR codes printed earlier for that session's tags. Attaching a static library entry suppresses the checkpoint's auto URL while attached (TASK-20261102-001); detaching revives it. A shared library URL is valid in every switch-on session that has it in its route. This is not a rotation feature.
   - **No rate limit:** a participant in a switch-on session can repeat a known token. Each duplicate, wrong-order or not-live attempt logs one invalid event, as SUN does.
   - **Toggle race:** a tap that re-reads the session after the team lock but before an admin's toggle-off commits may still be credited. Credits already recorded stay after the switch is turned off.
   - **One-bit oracle:** participant pages look different for switch-on and switch-off tokens. This is acceptable given the 36^10 token space.
@@ -190,4 +205,6 @@ updated: 2026-09-28
 
 # Related Tasks
 
-TASK-20260928-001 (TODO-001 DB/API, TODO-002 UI/routing)
+- TASK-20260928-001 (TODO-001 DB/API, TODO-002 UI/routing)
+- TASK-20261028-001 (tag library: checkpoint token replaced by a matched library token, original restored on release or move — superseded)
+- TASK-20261102-001 (shared library static tokens resolved in the participant's session, `resolve_static_token` routing for `/t`)

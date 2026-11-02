@@ -33,5 +33,7 @@ export async function POST(request: Request, { params }: Ctx) {
       { status: result.status },
     );
   }
+  // 변경: 등록·기준 갱신에 성공하면 태그 목록에도 추가·갱신 (실패해도 이 응답은 그대로)
+  await store.autoAddLibrarySun({ uid: sun.uid, ctr: sun.ctr, name: result.tag.name });
   return jsonOk(result.tag);
 }

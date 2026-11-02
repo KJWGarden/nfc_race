@@ -9,7 +9,8 @@ import { isWebNfcAvailable, scanNfcOnce } from "@/lib/nfc";
 import { useAdminRealtime } from "@/lib/admin-realtime";
 import { QrImage } from "@/components/qr-image";
 import { StatusBadge } from "@/components/status-badge";
-import type { AdminLiveView, NfcTag, SessionStatus } from "@/lib/types";
+import { RouteMap } from "./route-map";
+import type { AdminLiveView, LibraryEntry, LibraryList, NfcTag, SessionStatus } from "@/lib/types";
 
 const TABS = ["라이브", "참가자", "초대", "NFC", "순위", "공지", "설정"] as const;
 type Tab = (typeof TABS)[number];
@@ -309,6 +310,36 @@ function NfcPanel({
   const origin = originFromWindow();
   const template = sdmTemplate(origin);
   const allowStatic = live.session.allowStaticUrl;
+  const [library, setLibrary] = useState<LibraryList | null>(null);
+  const [libraryKey, setLibraryKey] = useState(0);
+  // 기능: 경로 만들기(목록에서 순서대로 추가·순서 변경) 상태. 진행 중·종료 세션은 서버와 같이 잠근다
+  const [routePick, setRoutePick] = useState("");
+  const [routeForm, setRouteForm] = useState({ hint: "", nextHint: "", locationNote: "" });
+  const [routeBusy, setRouteBusy] = useState(false);
+  const [routeError, setRouteError] = useState("");
+  const routeLocked = live.session.status === "live" || live.session.status === "finished";
+
+  // 변경: 태그 목록은 지점(live.tags)이 바뀔 때마다, 그리고 연결·해제 뒤에 다시 읽어 연결 표시가 낡지 않게 한다
+  useEffect(() => {
+    let stale = false;
+    api<LibraryList>("/api/admin/library")
+      .then((data) => {
+        if (!stale) setLibrary(data);
+      })
+      .catch(() => {
+        if (!stale) setLibrary(null);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [live.tags, libraryKey]);
+
+  // 변경: 목록 태그가 연결된 지점은 목록 URL 을 보여 준다 (자동 URL 은 인정되지 않음). 목록을 못 읽었으면 URL 을 숨긴다
+  function staticUrlFor(tag: NfcTag): string | null {
+    if (!tag.libraryId) return `${origin}/t/${tag.token}`;
+    const token = library?.entries.find((entry) => entry.id === tag.libraryId)?.token;
+    return token ? `${origin}/t/${token}` : null;
+  }
 
   // 기능: 세션별 고정 QR/URL 허용 스위치 저장 후 화면 갱신
   async function toggleStatic(next: boolean) {
@@ -341,6 +372,49 @@ function NfcPanel({
     if (!confirm(`${tag.name} 태그를 삭제할까요?`)) return;
     await api(`/api/admin/sessions/${live.session.id}/tags/${tag.id}`, { method: "DELETE" });
     await onChange();
+  }
+
+  // 기능: 선택한 목록 태그로 지점을 만들어 경로 끝에 붙인다 (이름은 목록 태그 이름)
+  async function addFromLibrary(event: React.FormEvent) {
+    event.preventDefault();
+    if (!routePick) return;
+    setRouteBusy(true);
+    setRouteError("");
+    try {
+      const tag = await api<NfcTag>(`/api/admin/sessions/${live.session.id}/tags/from-library`, {
+        method: "POST",
+        body: JSON.stringify({ libraryId: routePick, ...routeForm }),
+      });
+      setRoutePick("");
+      setRouteForm({ hint: "", nextHint: "", locationNote: "" });
+      setNotice(`${tag.name}: 경로 ${tag.order}번째에 추가했습니다.`);
+      await onChange();
+    } catch (err) {
+      setRouteError(err instanceof Error ? err.message : "추가하지 못했습니다.");
+    } finally {
+      setRouteBusy(false);
+    }
+  }
+
+  // 기능: 위/아래 이동. 현재 경로 id 전체를 바꾼 순서로 보낸다 (경로가 바뀌어 있으면 서버가 400 → 새로 읽는다)
+  async function moveTag(index: number, delta: -1 | 1) {
+    const ids = live.tags.map((tag) => tag.id);
+    const target = index + delta;
+    if (target < 0 || target >= ids.length) return;
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    setRouteBusy(true);
+    setRouteError("");
+    try {
+      await api(`/api/admin/sessions/${live.session.id}/tags/order`, {
+        method: "PUT",
+        body: JSON.stringify({ tagIds: ids }),
+      });
+    } catch (err) {
+      setRouteError(err instanceof Error ? err.message : "순서를 바꾸지 못했습니다.");
+    } finally {
+      await onChange();
+      setRouteBusy(false);
+    }
   }
 
   // 기능: UID 로 SDM 파일 읽기 키 조회 (태그에 키를 넣기 전 단계라 UID 는 조회에만 쓰고 지점에 묶지 않는다)
@@ -428,16 +502,87 @@ function NfcPanel({
         ) : null}
       </section>
 
+      {/* 기능: 경로 만들기. 태그 목록에서 지점을 순서대로 골라 이 세션의 출발→골인 경로를 만든다 (다른 세션과 독립) */}
+      <section className="rounded-2xl bg-white p-4 text-sm" data-testid="route-builder">
+        <h3 className="font-semibold">경로 만들기 (태그 목록에서 순서대로 선택)</h3>
+        <p className="mt-1 text-xs text-ink/55" data-testid="route-required">
+          {/* 변경: 표시값은 min(지점 수 설정, 경로 길이). 빈 경로는 0 (race.ts 의 경주 규칙은 그대로) */}
+          완주에 필요한 지점 수: {Math.min(live.session.checkpointCount, live.tags.length)} / 경로 {live.tags.length}
+        </p>
+        {/* 기능: 경로 순서 지도. live.tags 순서대로 출발 → 지점 → 골인을 크레파스 손그림으로 그리고, 순서가 바뀌면 다시 그린다 */}
+        <RouteMap tags={live.tags} />
+        {routeLocked ? (
+          <p className="mt-2 rounded-xl bg-gold/40 px-3 py-2 text-xs" data-testid="route-locked">
+            진행 중이거나 종료된 세션은 경로를 바꿀 수 없습니다. (추가·순서 변경 잠김)
+          </p>
+        ) : null}
+        {library?.available === false ? (
+          <p className="mt-2 text-xs text-ink/55">태그 목록 기능을 사용하려면 DB 업데이트가 필요합니다.</p>
+        ) : null}
+        {library?.available ? (
+          <form onSubmit={addFromLibrary} className="mt-3 space-y-3">
+            <select
+              value={routePick}
+              onChange={(event) => setRoutePick(event.target.value)}
+              disabled={routeLocked || routeBusy}
+              aria-label="경로에 추가할 태그"
+              className="w-full rounded-xl border border-ink/10 bg-paper px-3 py-2"
+            >
+              <option value="">경로에 추가할 태그를 고르세요</option>
+              {library.entries.map((entry) => {
+                const inRoute = entry.bindings.some((b) => b.sessionId === live.session.id);
+                return (
+                  <option key={entry.id} value={entry.id} disabled={inRoute}>
+                    {entry.kind === "sun" ? `SUN · ${entry.name} · 카운터 ${entry.counter}` : `고정 URL · ${entry.name}`}
+                    {inRoute ? " (이미 경로에 있음)" : ""}
+                  </option>
+                );
+              })}
+            </select>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Field label="이 지점 안내 (선택)" value={routeForm.hint} onChange={(v) => setRouteForm({ ...routeForm, hint: v })} />
+              <Field
+                label="다음 목적지 안내 (선택)"
+                value={routeForm.nextHint}
+                onChange={(v) => setRouteForm({ ...routeForm, nextHint: v })}
+              />
+              <Field
+                label="위치 메모 (선택)"
+                value={routeForm.locationNote}
+                onChange={(v) => setRouteForm({ ...routeForm, locationNote: v })}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={routeLocked || routeBusy || !routePick}
+              className="rounded-full bg-ink px-4 py-2 text-paper disabled:opacity-40"
+            >
+              경로 끝에 추가
+            </button>
+          </form>
+        ) : null}
+        {routeError ? <p className="mt-2 text-terra" data-testid="route-error">{routeError}</p> : null}
+        <p className="mt-2 text-xs text-ink/55">
+          같은 태그를 다른 세션 경로에도 넣을 수 있고, 세션마다 순서는 따로 정해집니다. SUN 태그는 각 세션 레이스 직전에 기준
+          갱신하세요.
+        </p>
+      </section>
+
       <ol className="space-y-4">
-        {live.tags.map((tag) => (
+        {live.tags.map((tag, index) => (
           <SunTagRow
             key={tag.id}
             sessionId={live.session.id}
             tag={tag}
-            staticUrl={allowStatic ? `${origin}/t/${tag.token}` : null}
+            canMoveUp={!routeLocked && !routeBusy && index > 0}
+            canMoveDown={!routeLocked && !routeBusy && index < live.tags.length - 1}
+            onMove={(delta) => moveTag(index, delta)}
+            staticUrl={allowStatic ? staticUrlFor(tag) : null}
             onChange={onChange}
             onRemove={() => removeTag(tag)}
             setNotice={setNotice}
+            library={library}
+            onLibraryChange={() => setLibraryKey((k) => k + 1)}
           />
         ))}
       </ol>
@@ -473,17 +618,27 @@ function sdmTemplate(origin: string) {
 function SunTagRow({
   sessionId,
   tag,
+  canMoveUp,
+  canMoveDown,
+  onMove,
   staticUrl,
   onChange,
   onRemove,
   setNotice,
+  library,
+  onLibraryChange,
 }: {
   sessionId: string;
   tag: NfcTag;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMove: (delta: -1 | 1) => void;
   staticUrl: string | null;
   onChange: () => Promise<void>;
   onRemove: () => void;
   setNotice: (value: string) => void;
+  library: LibraryList | null;
+  onLibraryChange: () => void;
 }) {
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
@@ -491,6 +646,22 @@ function SunTagRow({
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const registered = tag.uid !== "";
+  // 변경: 태그 목록 연결 상태는 행마다 따로 둔다 (선택, 확인 대기, 오류)
+  const [libraryId, setLibraryId] = useState("");
+  const [libConfirm, setLibConfirm] = useState(false);
+  const [libError, setLibError] = useState("");
+  const [libBusy, setLibBusy] = useState(false);
+  // 기능: 이 세션 지점의 안내 문구 편집 (다른 세션의 같은 목록 태그 지점과는 별개)
+  const [editing, setEditing] = useState(false);
+  const [hints, setHints] = useState({ hint: tag.hint, nextHint: tag.nextHint, locationNote: tag.locationNote });
+  const [hintError, setHintError] = useState("");
+  // 변경: 이 지점에 연결된 목록 항목. 고정 URL 은 지점의 library_id 로 먼저, 없으면 SUN 은 UID 로 찾는다
+  const matched: LibraryEntry | null =
+    (tag.libraryId ? library?.entries.find((entry) => entry.id === tag.libraryId) : undefined) ??
+    (registered
+      ? library?.entries.find((entry) => entry.kind === "sun" && entry.uid?.toUpperCase() === tag.uid.toUpperCase())
+      : undefined) ??
+    null;
 
   // 기능: 고정 URL 을 클립보드에 복사 (NFC 쓰기 앱에 붙여넣기용)
   async function copyStaticUrl() {
@@ -527,6 +698,69 @@ function SunTagRow({
       setError(err instanceof Error ? err.message : "요청에 실패했습니다.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  // 기능: 선택한 목록 태그를 이 지점에 연결한다. 교체·이동 확인이 필요하면 서버 메시지와 확인 버튼을 보여 준다
+  async function matchLibrary(replace: boolean) {
+    setLibBusy(true);
+    setLibError("");
+    try {
+      const res = await fetch(`/api/admin/sessions/${sessionId}/tags/${tag.id}/library`, {
+        method: "POST",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ libraryId, replace }),
+      });
+      const json = (await res.json()) as { ok: boolean; data?: NfcTag; error?: string; needsConfirm?: boolean };
+      if (!json.ok || !json.data) {
+        setLibConfirm(json.needsConfirm === true);
+        setLibError(json.error || "요청에 실패했습니다.");
+        return;
+      }
+      setLibConfirm(false);
+      setLibraryId("");
+      setNotice(`${json.data.name}: 목록 태그를 연결했습니다.`);
+      await onChange();
+      onLibraryChange();
+    } catch (err) {
+      setLibError(err instanceof Error ? err.message : "요청에 실패했습니다.");
+    } finally {
+      setLibBusy(false);
+    }
+  }
+
+  // 변경: 이 지점의 고정 URL 목록 태그 연결만 해제한다 (다른 세션·지점 연결은 그대로, 이 지점의 자동 URL 이 다시 인정된다)
+  async function releaseLibrary(entry: LibraryEntry) {
+    if (!window.confirm(`"${entry.name}" 연결을 이 지점에서 해제할까요?`)) return;
+    setLibBusy(true);
+    setLibError("");
+    try {
+      await api(`/api/admin/sessions/${sessionId}/tags/${tag.id}/library`, { method: "DELETE" });
+      setNotice(`${entry.name}: 연결을 해제했습니다.`);
+      await onChange();
+      onLibraryChange();
+    } catch (err) {
+      setLibError(err instanceof Error ? err.message : "연결을 해제하지 못했습니다.");
+    } finally {
+      setLibBusy(false);
+    }
+  }
+
+  // 기능: 안내·다음 안내·위치 메모를 기존 PATCH 로 저장한다
+  async function saveHints(event: React.FormEvent) {
+    event.preventDefault();
+    setHintError("");
+    try {
+      await api(`/api/admin/sessions/${sessionId}/tags/${tag.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(hints),
+      });
+      setEditing(false);
+      setNotice(`${tag.name}: 안내를 저장했습니다.`);
+      await onChange();
+    } catch (err) {
+      setHintError(err instanceof Error ? err.message : "저장하지 못했습니다.");
     }
   }
 
@@ -595,6 +829,52 @@ function SunTagRow({
           삭제
         </button>
       </div>
+      {/* 기능: 경로 순서 이동(맨 위의 위로·맨 아래의 아래로, 진행 중·종료 세션은 비활성)과 안내 편집 */}
+      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+        <button
+          type="button"
+          disabled={!canMoveUp}
+          onClick={() => onMove(-1)}
+          aria-label={`${tag.name} 위로`}
+          className="rounded-full border border-ink/20 px-3 py-1 disabled:opacity-30"
+        >
+          ▲ 위로
+        </button>
+        <button
+          type="button"
+          disabled={!canMoveDown}
+          onClick={() => onMove(1)}
+          aria-label={`${tag.name} 아래로`}
+          className="rounded-full border border-ink/20 px-3 py-1 disabled:opacity-30"
+        >
+          ▼ 아래로
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setHints({ hint: tag.hint, nextHint: tag.nextHint, locationNote: tag.locationNote });
+            setHintError("");
+            setEditing((v) => !v);
+          }}
+          aria-label={`${tag.name} 안내 편집`}
+          className="rounded-full border border-ink/20 px-3 py-1"
+        >
+          안내 편집
+        </button>
+      </div>
+      {editing ? (
+        <form onSubmit={saveHints} className="mt-2 grid gap-2 rounded-xl bg-paper p-3 sm:grid-cols-3">
+          <Field label="이 지점 안내" value={hints.hint} onChange={(v) => setHints({ ...hints, hint: v })} />
+          <Field label="다음 목적지 안내" value={hints.nextHint} onChange={(v) => setHints({ ...hints, nextHint: v })} />
+          <Field label="위치 메모" value={hints.locationNote} onChange={(v) => setHints({ ...hints, locationNote: v })} />
+          <div className="sm:col-span-3">
+            <button type="submit" className="rounded-full bg-ink px-3 py-1.5 text-xs text-paper">
+              안내 저장
+            </button>
+            {hintError ? <span className="ml-2 text-xs text-terra">{hintError}</span> : null}
+          </div>
+        </form>
+      ) : null}
       {confirmReplace ? (
         <div className="mt-2 rounded-xl bg-gold/40 px-3 py-2 text-xs">
           기존 태그를 이 태그로 교체할까요?
@@ -609,6 +889,81 @@ function SunTagRow({
         </div>
       ) : null}
       {error ? <p className="mt-2 text-xs text-terra">{error}</p> : null}
+      {/* 변경: 태그 목록에서 골라 이 지점에 연결. 목록 기능이 없으면(DB 업데이트 전) 안내만 보이고 나머지 행은 그대로 동작한다 */}
+      {library?.available === false ? (
+        <p className="mt-3 text-xs text-ink/55">태그 목록 기능을 사용하려면 DB 업데이트가 필요합니다.</p>
+      ) : null}
+      {library?.available ? (
+        <div className="mt-3 rounded-xl bg-paper p-3 text-xs" data-testid={`library-control-${tag.order}`}>
+          <p className="font-semibold" data-testid={`library-match-${tag.order}`}>
+            {matched ? `태그 목록: ${matched.name}` : "태그 목록에서 연결 안 됨"}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <select
+              value={libraryId}
+              onChange={(event) => {
+                setLibraryId(event.target.value);
+                setLibConfirm(false);
+                setLibError("");
+              }}
+              aria-label={`${tag.name} 목록에서 연결`}
+              className="min-w-0 flex-1 rounded-xl border border-ink/10 bg-white px-3 py-1.5"
+            >
+              <option value="">목록에서 연결할 태그를 고르세요</option>
+              {library.entries.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.kind === "sun"
+                    ? `SUN · ${entry.name} · 카운터 ${entry.counter}`
+                    : `고정 URL · ${entry.name}${
+                        entry.bindings.length > 0 ? ` (연결된 지점 ${entry.bindings.length}곳)` : ""
+                      }`}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={libBusy || !libraryId}
+              onClick={() => matchLibrary(false)}
+              className="rounded-full bg-ink px-3 py-1.5 text-paper disabled:opacity-40"
+            >
+              연결
+            </button>
+            {matched?.kind === "static" ? (
+              <button
+                type="button"
+                disabled={libBusy}
+                onClick={() => releaseLibrary(matched)}
+                className="rounded-full border border-ink/20 px-3 py-1.5 disabled:opacity-40"
+              >
+                연결 해제
+              </button>
+            ) : null}
+          </div>
+          {libConfirm ? (
+            <div className="mt-2 rounded-xl bg-gold/40 px-3 py-2">
+              {libError}
+              <button
+                type="button"
+                disabled={libBusy}
+                onClick={() => matchLibrary(true)}
+                className="ml-2 rounded-full bg-terra px-3 py-1 text-white"
+              >
+                확인하고 연결
+              </button>
+            </div>
+          ) : libError ? (
+            <p className="mt-2 text-terra">{libError}</p>
+          ) : null}
+          {/* 변경: 공유 연결 규칙 안내 (토큰 교체·이동 없음, 지점별 해제) */}
+          <p className="mt-2 text-ink/55" data-testid={`library-note-${tag.order}`}>
+            고정 URL 태그를 연결하면 참가자는 목록 URL로 이 지점을 인정받고, 연결된 동안 이 지점의 원래 URL·QR은 인정되지
+            않습니다. 같은 태그를 다른 세션의 지점에도 함께 연결할 수 있지만 한 세션에는 한 지점만 연결됩니다. 연결 해제는 이
+            지점에만 적용되며, 해제하면 원래 URL·QR이 다시 인정됩니다. 목록 URL은 &quot;고정 QR/URL 허용&quot;이 켜진
+            세션에서만 인정됩니다. SUN 태그를 연결하면 기준값이 목록에 저장된 카운터로 정해지므로, 각 세션 레이스 직전 기준
+            갱신은 그대로 필요합니다.
+          </p>
+        </div>
+      ) : null}
       {/* 기능: 고정 QR/URL 허용 세션에서만 지점 고정 URL·복사·QR 표시 */}
       {staticUrl ? (
         <div className="mt-3 flex flex-wrap items-start gap-4 rounded-xl bg-paper p-3">

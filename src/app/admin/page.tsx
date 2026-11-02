@@ -55,6 +55,10 @@ export default function AdminHomePage() {
             <h1 className="font-display mt-2 text-5xl">참가 세션</h1>
           </div>
           <div className="flex gap-2">
+            {/* 변경: 세션과 무관한 태그 목록 화면으로 가는 링크 */}
+            <Link href="/admin/tags" className="rounded-full border border-white/15 px-4 py-2 text-sm">
+              태그 목록
+            </Link>
             <button
               type="button"
               onClick={() => setOpen(true)}

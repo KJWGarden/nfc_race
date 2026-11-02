@@ -17,8 +17,10 @@ export async function POST(request: Request) {
     return jsonError(sun.status === 503 ? sun.error : "유효하지 않은 태그 URL입니다.", sun.status);
   }
   const context = await store.getSunAdminContext(sun.uid);
+  // 변경: 이 UID 의 태그 목록 항목(없으면 null)도 함께 반환 (읽기 전용)
+  const library = await store.getLibraryEntryByUid(sun.uid);
   return jsonOk(
-    { uid: sun.uid, ctr: sun.ctr, ...context },
+    { uid: sun.uid, ctr: sun.ctr, ...context, library },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

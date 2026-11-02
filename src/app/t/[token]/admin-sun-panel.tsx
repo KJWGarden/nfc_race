@@ -22,6 +22,8 @@ export function AdminSunPanel({ e, c }: { e: string; c: string }) {
   const [confirmReplace, setConfirmReplace] = useState(false);
 
   const [reloadKey, setReloadKey] = useState(0);
+  // 변경: null 이면 입력하지 않은 상태 (목록에 있는 이름을 기본값으로 보여 준다)
+  const [libName, setLibName] = useState<string | null>(null);
 
   // 기능: 읽기 전용 조회. 두 번 실행돼도(Strict Mode) 기록이 없으므로 안전하며, 늦게 온 이전 응답은 버린다
   useEffect(() => {
@@ -70,6 +72,26 @@ export function AdminSunPanel({ e, c }: { e: string; c: string }) {
     }
   }
 
+  // 기능: 이 태그를 이름과 함께 태그 목록에 등록(이미 있으면 이름·카운터 갱신). 서버가 SUN 을 다시 검증한다
+  async function registerLibrary(name: string) {
+    if (!sun) return;
+    setBusy(true);
+    setError("");
+    setDone(null);
+    try {
+      await api("/api/admin/library", {
+        method: "POST",
+        body: JSON.stringify({ kind: "sun", ...sun, name }),
+      });
+      setLibName(null);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "요청에 실패했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST" });
     window.location.reload();
@@ -106,6 +128,38 @@ export function AdminSunPanel({ e, c }: { e: string; c: string }) {
               <p>
                 UID <span className="font-mono">{ctx.uid}</span> · 이 URL 카운터 <strong>{ctx.ctr}</strong>
               </p>
+            </section>
+
+            {/* 변경: 태그 목록 등록 상태와 이름을 붙여 등록하는 폼 */}
+            <section className="space-y-2 rounded-2xl bg-paper p-4 text-ink" data-testid="library-status">
+              <h2 className="font-semibold">
+                {ctx.library ? `태그 목록: ${ctx.library.name}` : "태그 목록에 없음"}
+              </h2>
+              {ctx.library ? (
+                <p className="text-xs text-ink/55">목록에 저장된 카운터 {ctx.library.counter}</p>
+              ) : null}
+              <form
+                className="flex flex-wrap gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  registerLibrary(libName ?? ctx.library?.name ?? "");
+                }}
+              >
+                <input
+                  value={libName ?? ctx.library?.name ?? ""}
+                  onChange={(event) => setLibName(event.target.value)}
+                  placeholder="태그 이름"
+                  aria-label="태그 목록 이름"
+                  className="min-w-0 flex-1 rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm"
+                />
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="rounded-full bg-ink px-4 py-2 text-sm text-paper disabled:opacity-50"
+                >
+                  목록에 등록
+                </button>
+              </form>
             </section>
 
             {ctx.bindings.length > 0 ? (
