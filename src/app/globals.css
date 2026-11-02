@@ -162,6 +162,8 @@ body {
 
 /* 기능: 상단 고정 미니 경로 지도의 나타남/사라짐 전환. 숨김 상태는 클릭을 막지 않는다 */
 .route-mini {
+  /* 변경: 고정 막대를 자체 합성 레이어로 올려 스크롤 중 다시 그리지 않고 transform·opacity 전환만 합성한다 */
+  will-change: transform, opacity;
   opacity: 0;
   transform: translateY(-140%);
   visibility: hidden;
@@ -190,4 +192,15 @@ body {
   .route-mini {
     transition: none;
   }
+}
+
+/* 기능: 경로 지도 상자 격리. 지도 안 다시 그리기가 페이지 나머지의 레이아웃·페인트로 번지지 않게 한다 */
+.route-map-box {
+  contain: layout paint;
+}
+
+/* 기능: 크레파스 알갱이 타일 (미리 만든 48px 정적 PNG 종이색 점·사선 결. 런타임 필터·블렌드 모드 없음) */
+.crayon-grain {
+  background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAADFklEQVR42s1Z608UQQy/P5sQFSNR4vPwiTGcns8jB4oYjRBfhOADhcCJohjiK0YeEunnfqnZZDeZjLMz7WyHu002O7Pbdn7T7XTaTq1mXYQwUCu5CKFZS3gRwnsGzY72oN+sfid/Xq71+kUIMybw/D4q4J8S0K5yCQ9GTKRj9S9VVMyehnYbge9nKsj+5Xj3IJWZfOyymY5IiF8Y7cEKg45Z/dlIOe38uSRlfGa7rsJ9EcJLgZxZKXhCuG20tx3f/4r8rNknhKcS8AyaTUL4XfJtmxBaVWxvPZFNjxXgUy2a9fyeUJJ32LU2JHYd8ogqWieE7wqTvVpVwAqTbksod5qzhxDCnL07m39KQ0kxSnnnAk0IPxm8S453p12EG9nNEPhQYUJ1Bs2Q1X/uI97In8sBoZNWf6EHgsmtGKaZWGaX2RDCCQbfuCg0DtDdkezigsm9cQEvA59tcmwlEsIVlhYc4Tg3NCaEtZDWCeGHT8By2e8zhRHCKa7vJoT+bi+ScV/EyuBfVMZzVkPIpNF+JOS9pjSRBe/i5tp7aN3EgCeEQzGD7VYAes5oj9oxPUOLzchxhzlEJ1PZZBalcsHb2WGeYLWc+QIhvFVcdHXHu74Az4QrMSpiqmIPiAXU7qGa1F5pLiqJiYz3xwWDfzXaTe2ZDQrpV7v4F25GJwl2NU7Iu8OkG1BdhMXGJQFPCAc83+7ux2/ajeTr8wG3wRPCLaH8T+z4Q9P7lGm9iJsI4UsV4a+t/miqLIoQLqYymbqQfm0fzPiI1Z/nMG1ytKlZvfbVXTUCTF9A1q4g45ivnpTfohL7Z+6qD1UyDLonEROTAXcIeFwhaxti8H3gumur5N7QNCEzV14JBYKEcEPL7UqFzPsWnrn4jGPWjsRll2VyUv7/sp0MfLarZocbhHDf3GUDXmPK8e5CSl877aummRq1z8A44BXwjbDKNJlbM2s9xQF2ATwEPpFyWzXfGTYh3AuFzFLgZgqY919VmMB5VmhNCNeVNNbwBGvDKUwstQksCun7fTu0M4XUrGO6jmM1DkdyOX/M/j9ozbfovLhyvAAAAABJRU5ErkJggg==");
+  background-size: 48px 48px;
 }

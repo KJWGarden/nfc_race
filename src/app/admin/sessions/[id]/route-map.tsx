@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { NfcTag } from "@/lib/types";
 
@@ -270,8 +270,6 @@ function colsForWidth(width: number): number {
 export function RouteMap({ tags }: { tags: RouteMapTag[] }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [cols, setCols] = useState(4);
-  const rawId = useId();
-  const uid = rawId.replace(/[^a-zA-Z0-9_-]/g, "");
 
   // 기능: 카드 폭이 바뀌면 열 수를 다시 계산 (observe 직후 첫 콜백에서 초기값도 맞춘다)
   useEffect(() => {
@@ -325,12 +323,12 @@ export function RouteMap({ tags }: { tags: RouteMapTag[] }) {
   const { nodes, segments, width, height } = layout;
   // 변경: 노드가 많아도 전체 그리기가 4초 안팎에 끝나도록 한 칸 간격을 줄인다
   const step = Math.min(0.42, Math.max(0.16, 3.8 / nodes.length));
-  const filter = `url(#crayon-${uid})`;
   const ariaLabel = `경로 순서: ${nodes.map((n) => (n.kind === "checkpoint" ? `${n.order}. ${n.name}` : n.name)).join(" → ")}`;
 
   return (
     <>
-      <div ref={wrapRef} data-testid="route-map" className="crayon-paper mt-3 overflow-hidden rounded-2xl">
+      {/* 변경: 지도 상자를 레이아웃·페인트 격리(contain)해 애니메이션 다시 그리기가 지도 안에서만 일어나게 한다 */}
+      <div ref={wrapRef} data-testid="route-map" className="crayon-paper route-map-box relative mt-3 overflow-hidden rounded-2xl">
         <svg
           key={routeKey}
           data-testid="route-map-svg"
@@ -339,35 +337,10 @@ export function RouteMap({ tags }: { tags: RouteMapTag[] }) {
           role="img"
           aria-label={ariaLabel}
         >
-          <defs>
-            {/* 기능: 크레파스 질감. 노이즈로 획 가장자리를 흔들고(displacement), 거친 알갱이 마스크로 왁스가 덜 묻은 틈을 낸다 */}
-            {/* 변경: 거의 평평한 선도 잘리지 않게 필터 영역을 사용자 좌표로 넉넉히 잡는다 */}
-            <filter
-              id={`crayon-${uid}`}
-              filterUnits="userSpaceOnUse"
-              x={-width}
-              y={-height}
-              width={width * 3}
-              height={height * 3}
-              colorInterpolationFilters="sRGB"
-            >
-              <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="2" seed="4" result="warp" />
-              <feDisplacementMap in="SourceGraphic" in2="warp" scale="3.2" xChannelSelector="R" yChannelSelector="G" result="wobbled" />
-              <feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="9" result="grain" />
-              <feColorMatrix in="grain" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  4.4 0 0 0 -1.15" result="grainMask" />
-              <feComposite in="wobbled" in2="grainMask" operator="in" />
-            </filter>
-            {/* 기능: 종이 결 (아주 옅은 얼룩) */}
-            <filter id={`paper-${uid}`} x="0" y="0" width="100%" height="100%">
-              <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" seed="2" />
-              <feColorMatrix type="matrix" values="0 0 0 0 0.35  0 0 0 0 0.3  0 0 0 0 0.22  0 0 0 0.09 0" />
-            </filter>
-          </defs>
-
-          <rect width={width} height={height} filter={`url(#paper-${uid})`} />
+          {/* 변경: 런타임 SVG 노이즈·변위 필터와 종이 노이즈 사각형을 없앴다. 모바일에서 애니메이션 프레임마다 다시 래스터되어 렉의 원인이었다 */}
 
           {/* 기능: 연결선. 굵은 본선 + 살짝 어긋난 덧칠 선 + 화살촉 순서로, 앞 노드가 나타난 뒤 차례로 그린다 */}
-          <g fill="none" strokeLinecap="round" strokeLinejoin="round" filter={filter}>
+          <g fill="none" strokeLinecap="round" strokeLinejoin="round">
             {segments.map((seg, k) => {
               const delay = k * step + step * 0.7;
               const dur = step * 1.15;
@@ -416,7 +389,7 @@ export function RouteMap({ tags }: { tags: RouteMapTag[] }) {
               <g key={node.key} transform={`translate(${f(x)} ${f(y)}) rotate(${f(node.tilt)})`} data-testid={testId} data-name={node.name}>
                 <title>{node.kind === "checkpoint" ? `${node.order}. ${node.name}` : node.name}</title>
                 <g className="crayon-pop" style={{ animationDelay: `${t}s`, animationDuration: `${Math.max(0.3, step * 1.1)}s` }}>
-                  <g fill="none" strokeLinecap="round" strokeLinejoin="round" filter={filter}>
+                  <g fill="none" strokeLinecap="round" strokeLinejoin="round">
                     <path
                       d={scribbleFill(0, 0, node.r - 1, `fill:${node.key}`)}
                       pathLength={1}
@@ -496,7 +469,7 @@ export function RouteMap({ tags }: { tags: RouteMapTag[] }) {
                       strokeWidth={10}
                       strokeOpacity={0.6}
                       strokeLinecap="round"
-                      filter={filter}
+                     
                     />
                     <text textAnchor="middle" y={node.r + 22} fontSize={12.5} fontWeight={700} fill={TEXT_COLOR}>
                       {node.label}
@@ -507,6 +480,8 @@ export function RouteMap({ tags }: { tags: RouteMapTag[] }) {
             );
           })}
         </svg>
+        {/* 기능: 크레파스 알갱이. 미리 만든 작은 점무늬 타일(정적 이미지)을 지도 위에 한 번 깔아 왁스가 덜 묻은 틈처럼 보이게 한다 (필터·블렌드 없음) */}
+        <div aria-hidden className="crayon-grain pointer-events-none absolute inset-0" />
       </div>
       {/* 기능: 상단 고정 미니 지도. body 로 포털해 페이지 배치를 밀지 않는다 (첫 관찰 결과가 나온 뒤에만 그린다) */}
       {pinned !== null
@@ -515,7 +490,6 @@ export function RouteMap({ tags }: { tags: RouteMapTag[] }) {
               tags={tags}
               routeKey={routeKey}
               shown={pinned}
-              uid={uid}
               onJump={() => wrapRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
             />,
             document.body,
@@ -529,18 +503,16 @@ const MINI_GAP = 88;
 const MINI_PAD = 26;
 const MINI_Y = 21;
 
-// 기능: 상단에 작게 쌓이는 한 줄 미니 지도. 같은 크레파스 질감·색으로 출발 → 번호 → 골인 을 그리고, 길면 가로로 스크롤한다
+// 기능: 상단에 작게 쌓이는 한 줄 미니 지도. 같은 크레파스 색·손그림 선으로 (질감 타일·필터 없이 가볍게) 출발 → 번호 → 골인 을 그리고, 길면 가로로 스크롤한다
 function MiniRouteMap({
   tags,
   routeKey,
   shown,
-  uid,
   onJump,
 }: {
   tags: RouteMapTag[];
   routeKey: string;
   shown: boolean;
-  uid: string;
   onJump: () => void;
 }) {
   const nodes = useMemo(() => {
@@ -570,13 +542,12 @@ function MiniRouteMap({
   }, [tags]);
   const width = MINI_PAD * 2 + (nodes.length - 1) * MINI_GAP;
   const height = 54;
-  const filter = `url(#crayon-mini-${uid})`;
 
   return (
     <div className="route-mini pointer-events-none fixed inset-x-0 top-2 z-40 flex justify-center px-3" data-shown={shown ? "true" : "false"} aria-hidden={!shown}>
       <div
         data-testid="route-map-mini"
-        className="crayon-paper pointer-events-auto flex w-full max-w-3xl items-center gap-1 rounded-2xl py-1 pr-1 pl-2 text-ink shadow-[0_6px_18px_-8px_rgba(18,22,15,0.45)]"
+        className="crayon-paper route-map-box pointer-events-auto flex w-full max-w-3xl items-center gap-1 rounded-2xl py-1 pr-1 pl-2 text-ink shadow-[0_6px_18px_-8px_rgba(18,22,15,0.45)]"
       >
         <div className="min-w-0 flex-1 overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
           <svg
@@ -588,17 +559,7 @@ function MiniRouteMap({
             role="img"
             aria-label={`경로 순서(미니): ${nodes.map((n) => (n.kind === "checkpoint" ? `${n.order}. ${n.name}` : n.name)).join(" → ")}`}
           >
-            <defs>
-              {/* 기능: 미니 지도용 크레파스 질감 (작은 크기에 맞춰 흔들림을 줄인다) */}
-              <filter id={`crayon-mini-${uid}`} filterUnits="userSpaceOnUse" x={-20} y={-20} width={width + 40} height={height + 40}>
-                <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="4" result="warp" />
-                <feDisplacementMap in="SourceGraphic" in2="warp" scale="1.4" xChannelSelector="R" yChannelSelector="G" result="wobbled" />
-                <feTurbulence type="fractalNoise" baseFrequency="1.3" numOctaves="2" seed="9" result="grain" />
-                <feColorMatrix in="grain" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  4.4 0 0 0 -1.05" result="grainMask" />
-                <feComposite in="wobbled" in2="grainMask" operator="in" />
-              </filter>
-            </defs>
-            <g fill="none" strokeLinecap="round" strokeLinejoin="round" filter={filter}>
+            <g fill="none" strokeLinecap="round" strokeLinejoin="round">
               {nodes.slice(0, -1).map((a, k) => {
                 const b = nodes[k + 1];
                 const line = wobblyLine(
@@ -625,7 +586,7 @@ function MiniRouteMap({
                 <g key={node.key} transform={`translate(${f(node.x)} ${f(node.y)})`} data-testid={testId} data-name={node.name}>
                   <title>{node.kind === "checkpoint" ? `${node.order}. ${node.name}` : node.name}</title>
                   <g className="crayon-pop" style={{ animationDelay: `${node.order * 0.07}s`, animationDuration: "0.3s" }}>
-                    <g fill="none" strokeLinecap="round" strokeLinejoin="round" filter={filter}>
+                    <g fill="none" strokeLinecap="round" strokeLinejoin="round">
                       <path d={scribbleFill(0, 0, node.r - 1, `mfill:${node.key}`, -30, 3.6)} stroke={node.crayon.fill} strokeWidth={4} />
                       <path d={wobblyLoop(0, 0, node.r, `mring:${node.key}`, 1.1, 0.45)} stroke={node.crayon.stroke} strokeWidth={2.4} />
                     </g>

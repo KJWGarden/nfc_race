@@ -54,6 +54,7 @@ Later entries must come from an APPROVED Task.
   - Auto-add after direct registration (fails safe), token-uniqueness trigger with advisory locks (Risk 2a), lock order, deploy-window codes, no admin Realtime on the library table.
   - Its delete rules (connected static entry refused, SUN delete leaves checkpoints) are **superseded** by detach-all delete (TASK-20261102-004).
   - Residual risk: a library counter older than the real one keeps in-between URLs valid until the baseline refresh.
+  - Route order map / sticky mini map in the NFC tab; no runtime SVG filters (mobile performance).
   - tags: nfc, sun, static-url, tag-library, matching, original_token, advisory-lock, trigger, deploy-window, admin
 - **Shared library checkpoints and per-session routes** — `features/shared-checkpoint-routes.md`
   - One library entry (SUN or static) is used by many sessions at once, one checkpoint per session, with an unchanged link. Static attachment is `tags.library_id`; no token swap.

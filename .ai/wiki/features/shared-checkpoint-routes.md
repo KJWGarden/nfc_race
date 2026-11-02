@@ -113,6 +113,13 @@ Then:
 - This guard is needed because old-schema functions with the same names (`get_library`, `match_library`, …) exist with old semantics; without it the new app would get `available:true` and old-semantics writes.
 - Flows deliberately preserved on the old schema: direct SUN registration (its library auto-add is skipped), `sun/inspect` (`library:null`), `/t` (falls back to the old single-row `getStaticTagInfo`), `/api/tag` (old `record_static_tag`).
 
+## Route order map and mini map (admin NFC tab, UI only)
+
+- `src/app/admin/sessions/[id]/route-map.tsx` (`RouteMap`, `MiniRouteMap`), styles in `src/app/globals.css` (`.crayon-*`, `.route-map-box`, `.route-mini`). Source: `live.tags` order; no DB/API.
+- Full map: 출발 → numbered checkpoints → 골인, serpentine layout (2–6 columns by `ResizeObserver`), deterministic wobble seeded by tag id, drawing animation (~4 s) replayed when the ordered id list changes (SVG keyed on joined ids), static under `prefers-reduced-motion`, placeholder for an empty route (TASK-20261102-002).
+- Mini map: pinned at the top (portal into `document.body`) while the full map's bottom edge is above the viewport; rAF-throttled passive scroll/resize check (an IntersectionObserver missed jumps from "above" to "below the fold"); "↑ 지도" scrolls back (TASK-20261102-003).
+- **Performance constraint (TASK-20261102-005):** do not use runtime SVG filters (`<filter>`, `feTurbulence`, `feDisplacementMap`), CSS `filter` or blend modes on the map or mini map. They were re-rasterized every animation frame and caused mobile lag. The crayon look now comes from baked path wobble, double strokes, scribble fills and one static embedded PNG grain tile (`.crayon-grain`); animate only `stroke-dashoffset`, `opacity`, `transform`; `contain: layout paint` on the containers; `will-change` on the fixed mini bar. Headless 390 px measurement with CPU 4x throttling: drawing task time 4694 → 1832 ms, compositing 1617 → 95 ms (`.ai/tasks/archive/TASK-20261102-005/runtime/web/TODO-001/report.md`). Real-device performance was not measured.
+
 # Decision
 
 - **Per-checkpoint attachment column instead of token swapping** (D1/D2): the swap made the library token live in one `tags.token`, which can hold only one checkpoint; a nullable FK plus a per-session unique index expresses "many sessions, one per session" directly.
@@ -178,6 +185,8 @@ Then:
 - **Not requested:** a SUN "연결 해제" in the session NFC tab, undo/restore of a detached connection, bulk operations, dropping the old `delete_library_entry`.
 
 # Related Tasks
+
+- TASK-20261102-002 (route map), TASK-20261102-003 (mini map), TASK-20261102-005 (map performance)
 
 - TASK-20261102-001 (TODO-001 DB/store/API/`/t`, TODO-002 route builder UI and README)
 - TASK-20261102-004 (TODO-001 `detach_library_binding` / `delete_library_entry_detach_all` + store + API, TODO-002 `/admin/tags` connection list, detach and delete UI, README)
