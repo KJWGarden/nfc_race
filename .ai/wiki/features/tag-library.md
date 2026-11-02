@@ -22,6 +22,8 @@ updated: 2026-11-02
 ---
 
 > **Superseded in part by TASK-20261102-001 (`features/shared-checkpoint-routes.md`).** Static entries are no longer bound by swapping `tags.token`. They are attached per checkpoint through `tags.library_id`, to many sessions at once (one checkpoint per session). `tags.original_token` and `tag_library.bound_tag_id` are always null (CHECK constraints), there is no move/restore, "연결 해제" is per checkpoint, `release` means "detach from all checkpoints", and `get_library()` returns `bindings` for both kinds (the `binding` field is gone). Statements below about the swap, `original_token`, `bound_tag_id`, single binding, move confirmation and restore-on-release describe the TASK-20261028-001 state and are kept as history. The SUN rules, issuance, auto-add, the token trigger and the advisory locks still apply.
+>
+> **Also superseded by TASK-20261102-004:** the delete rules below are history. `DELETE /api/admin/library/[libraryId]` now calls `delete_library_entry_detach_all` (detach every connection of either kind, then delete, atomically; returns `detached`), so connected static entries are no longer refused and deleting a SUN entry unregisters its checkpoints. "SUN unmatch" now exists as per-connection detach on `/admin/tags` (`detach_library_binding`). The old `delete_library_entry` stays in the DB, unused by the app. Details: `features/shared-checkpoint-routes.md`.
 
 # Summary
 
@@ -150,9 +152,10 @@ Defaults chosen by the MASTER and approved through Codex review: no backfill of 
 - **Library page freshness:** no Realtime for the library; the NFC tab refetches on `live.tags` changes, so a library-only change elsewhere (rename, delete) appears on the next refetch.
 - **No backfill:** checkpoints bound before this feature enter the library only on their next direct registration or baseline refresh.
 - ~~**README gap:** the "태그 목록" subsection still says the checkpoint-matching screen will be added later.~~ Fixed in TASK-20261102-001.
-- **Not requested:** rename UI, SUN "unmatch", bulk import, in-app NFC writing, static `/t` admin registration of unbound library tokens.
+- **Not requested:** rename UI, ~~SUN "unmatch"~~ (added by TASK-20261102-004 on `/admin/tags`), bulk import, in-app NFC writing, static `/t` admin registration of unbound library tokens.
 
 # Related Tasks
 
 - TASK-20261028-001 (TODO-001 DB/API, TODO-002 library page and `/t` admin mode, TODO-003 NFC tab matching)
 - TASK-20261102-001 (shared static attachment across sessions, per-session routes; supersedes the static swap model — `features/shared-checkpoint-routes.md`)
+- TASK-20261102-004 (per-connection detach for both kinds and detach-all delete on `/admin/tags`; supersedes the delete rules above)

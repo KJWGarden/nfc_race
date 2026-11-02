@@ -28,12 +28,14 @@ updated: 2026-11-02
 
 - **Migrations**
   - Schema lives in `supabase/migrations/<timestamp>_<name>.sql`, applied in file-name order.
-  - There are nine current files:
+  - There are ten current files:
     - dated 20260927: `…120000_init`, `…130000_admin_realtime`, `…140000_sun`, `…150000_sun_register`, `…160000_admin_login_attempts`, `…170000_participant_rejoin`;
     - `20260928100000_static_tag_switch`;
     - `20261028100000_tag_library` (TASK-20261028-001);
-    - `20261102100000_shared_tag_library` (TASK-20261102-001).
-  - The first eight have been applied on hosted by the user (the eighth on 2026-10-28). The ninth was **not** applied on hosted during TASK-20261102-001; a read-only, count-only pre-check for swapped bindings was prepared (`.ai/tasks/archive/TASK-20261102-001/evidence/TODO-001/hosted-precheck.sql`) for the user to run first.
+    - `20261102100000_shared_tag_library` (TASK-20261102-001);
+    - `20261102120000_library_binding_detach` (TASK-20261102-004; adds only two new functions).
+  - The first eight have been applied on hosted by the user (the eighth on 2026-10-28). The ninth was **not** applied on hosted during TASK-20261102-001; a read-only, count-only pre-check for swapped bindings was prepared (`.ai/tasks/archive/TASK-20261102-001/evidence/TODO-001/hosted-precheck.sql`) for the user to run first. The tenth was **not** applied on hosted during TASK-20261102-004 either.
+  - **Hosted status (2026-11-02):** the user applied `20261102100000_shared_tag_library` and then `20261102120000_library_binding_detach` in the SQL Editor. Read-only catalog checks confirmed: `tags.library_id`, `tags_original_token_unused`, `shared_library_schema`, `add_tag_from_library`, `reorder_session_tags`, `resolve_static_token`, `detach_library_binding`, `delete_library_entry_detach_all` exist; anon has no EXECUTE, service_role has; 0 remaining swapped bindings / saved originals. A second run of the ninth file failed harmlessly with 42701 (`column "library_id" ... already exists`) because the SQL Editor runs the script as one transaction; check the catalog before re-running a migration instead of re-running it.
   - **Deploy order:** the user applies a new migration on hosted in the SQL Editor **before** deploying the app version that uses it. The hosted API check for that Task runs only after the user confirms the migration is applied.
   - **Reverse deploy window (data-migrating migrations):** when a migration changes the meaning of existing data, the old app may misbehave between apply and deploy. For `20261102100000_shared_tag_library` (library tokens leave `tags.token`), the old app's `/t` stops crediting library static URLs until the new app is live. Rule: apply it and deploy the new app **immediately afterwards**, and **never during a live race**. README states this. The migration also converts existing swapped bindings and raises (aborting atomically) if it finds a broken or orphan swap.
   - When practical, code should tolerate the window before the migration is applied. The static switch, for example:
@@ -41,6 +43,7 @@ updated: 2026-11-02
     - maps a missing RPC (PGRST202 / 42883) to the pre-change response.
   - The tag library extends this to a missing table: `LIBRARY_UNAVAILABLE` = PGRST202, 42883, PGRST205, 42P01 → list `available:false`, writes 503 with a "DB 업데이트가 필요합니다" message, side calls skipped (`features/tag-library.md`). Route all access to a new table through RPCs so one code set covers the window.
   - When a migration **replaces** functions that keep their names, a missing-RPC error cannot detect the old schema. Add a capability probe function that exists only in the new migration (e.g. `shared_library_schema()`, checked by `requireSharedLibrary()` in `db.ts`) and call it before every dependent write (`features/shared-checkpoint-routes.md`).
+  - Preferred alternative when semantics change: add the new behavior under a **new function name** and leave the old function unchanged, so a missing function maps to the deploy-window 503 instead of silently running old semantics, and an old deployed app keeps its old behavior (TASK-20261102-004: `delete_library_entry_detach_all` next to the unchanged `delete_library_entry`).
   - Additive `add column … not null default <constant>` changes are metadata-only on PG11+ and do not break the running app.
   - Agents apply them locally with `supabase migration up --local`, or `supabase db reset --local` for a fresh local DB. The user applies the same file on hosted.
   - Implementation manifests record each new file's sha256. They also record before/after hashes showing that the existing files are byte-identical.
@@ -95,7 +98,8 @@ updated: 2026-11-02
 - TASK-20261028-001 repeated it again: the user applied the eighth migration and explicitly authorized the hosted check; the hosted API regression passed 42/42 with identical user-data digests (including `tag_library`) and 0 leftovers by exact id (`.ai/tasks/archive/TASK-20261028-001/runtime/web/FINAL/hosted/hosted-check.out.txt`). The seven earlier files stayed byte-identical.
   - The new unique index was on a new, all-null column, so no hosted pre-check for violations was needed.
 - TASK-20261102-001 validated the ninth migration only locally: the eight-migration schema was reset, swapped bindings were created with the old functions, the new app's deploy-window behavior was checked, then `supabase migration up --local` applied the new file and the post-migration checks ran (162/162, `.ai/tasks/archive/TASK-20261102-001/runtime/web/FINAL/api-check.out.txt`). The eight earlier files stayed byte-identical.
-- Checks that must simulate a missing function (the deploy-window fallback) are run **only locally**. They rename the function and then restore it, or (TASK-20261102-001) run the new app against a local DB reset with the new migration set aside.
+- TASK-20261102-004 validated the tenth migration only locally the same way: nine-migration reset (new file set aside), deploy-window 503 checks, then `supabase migration up --local` and the post-migration checks (66/66, `.ai/tasks/archive/TASK-20261102-004/runtime/web/FINAL/api-check.out.txt`). The nine earlier files stayed byte-identical.
+- Checks that must simulate a missing function (the deploy-window fallback) are run **only locally**. They rename the function and then restore it, or (TASK-20261102-001, TASK-20261102-004) run the new app against a local DB reset with the new migration set aside.
 
 # Future Considerations
 
@@ -107,3 +111,4 @@ None confirmed.
 - TASK-20260928-001 (seventh migration, deploy order)
 - TASK-20261028-001 (eighth migration, table-level deploy window, explicit authorization for hosted checks)
 - TASK-20261102-001 (ninth migration, reverse deploy window, capability probe)
+- TASK-20261102-004 (tenth migration, new-function-name deploy-window pattern)

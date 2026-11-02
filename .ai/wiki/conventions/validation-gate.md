@@ -1,14 +1,14 @@
 ---
 title: Validation gate
 type: convention
-task: bootstrap, TASK-20260927-001
-tags: lint, tsc, browser, review, playwright
+task: bootstrap, TASK-20260927-001, TASK-20261102-004
+tags: lint, tsc, browser, review, playwright, not-applicable, endpoint-behavior
 related_files:
   - scripts/validate.sh
   - scripts/ai-review.sh
   - .claude/CLAUDE.md
   - .ai/reviewer/REVIEWER.md
-updated: 2026-09-28
+updated: 2026-11-02
 ---
 
 # Summary
@@ -45,6 +45,7 @@ Independent review has to open the same files the implementation agent claims as
 
 - Do not pipe `scripts/validate.sh` or `scripts/ai-review.sh` through `tail`, `head`, or `grep`.
 - Do not mark runtime validation `NOT_APPLICABLE` for a visible UI change.
+- **A "DB/API-only" Todo still needs browser validation when it changes the behavior of an existing endpoint that an existing UI control calls.** In TASK-20261102-004, TODO-001 switched `DELETE /api/admin/library/[libraryId]` to detach-all-then-delete without touching any UI file and recorded runtime validation as `NOT_APPLICABLE`. Codex returned CHANGES_REQUIRED (blocker B1): the existing `/admin/tags` "삭제" button now succeeded for connected entries and detached their checkpoints, a visible behavior change. API/SQL checks did not replace the browser check; the fix was to drive that existing button in the browser and check the list refresh and the affected checkpoints in the NFC tabs. Before marking `NOT_APPLICABLE`, search the UI for callers of every changed endpoint.
 - `scripts/ai-review.sh`, `.ai/reviewer/REVIEWER.md`, and `.ai/reviewer/review.schema.json` change only when the user asks to change review infrastructure.
 
 # Related Files
@@ -65,4 +66,4 @@ Add a browser automation runner only when the user asks for one. Until then, the
 
 # Related Tasks
 
-bootstrap; TASK-20260927-001 (evidence-script lint lesson)
+bootstrap; TASK-20260927-001 (evidence-script lint lesson); TASK-20261102-004 (browser validation for changed endpoints behind existing UI controls)

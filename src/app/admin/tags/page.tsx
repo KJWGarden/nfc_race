@@ -6,9 +6,16 @@ import { ApiError, api, originFromWindow } from "@/lib/api";
 import { formatDateTime, sessionStatusLabel } from "@/lib/format";
 import { isWebNfcAvailable, scanNfcOnce } from "@/lib/nfc";
 import { QrImage } from "@/components/qr-image";
-import type { LibraryEntry, LibraryList } from "@/lib/types";
+import type { LibraryBinding, LibraryEntry, LibraryList } from "@/lib/types";
 
 const UNAVAILABLE_MESSAGE = "태그 목록 기능을 사용하려면 DB 업데이트가 필요합니다.";
+
+// 기능: 진행 중 세션이 연결에 있으면 확인 창에 붙이는 경고 (세션 이름 포함)
+function liveWarning(bindings: LibraryBinding[]): string {
+  const names = [...new Set(bindings.filter((b) => b.sessionStatus === "live").map((b) => b.sessionName))];
+  if (names.length === 0) return "";
+  return `\n\n진행 중인 세션이 있습니다: ${names.join(", ")}. 연결을 해제하면 이 지점은 바로 인정되지 않습니다. 아직 이 지점에 오지 않은 팀은 여기서 막힐 수 있습니다.`;
+}
 
 // 기능: 태그 목록 관리 화면. SUN 태그는 읽은 URL + 이름으로, 고정 URL 태그는 이름으로 등록하고 연결 현황을 본다
 export default function AdminTagsPage() {
@@ -93,12 +100,39 @@ export default function AdminTagsPage() {
     });
   }
 
-  // 기능: 확인을 받은 뒤 목록 태그를 삭제한다 (연결된 고정 URL 태그는 서버가 거부)
+  // 변경: 확인을 받은 뒤 목록 태그를 삭제한다. 연결이 있으면 해제될 지점을 모두 보여 주고, 서버가 모두 해제한 뒤 삭제한다
   async function remove(entry: LibraryEntry) {
-    if (!window.confirm(`"${entry.name}" 태그를 목록에서 삭제할까요?`)) return;
+    const message =
+      entry.bindings.length === 0
+        ? `"${entry.name}" 태그를 목록에서 삭제할까요?`
+        : `"${entry.name}" 태그를 목록에서 삭제할까요?\n모든 연결을 해제한 뒤 삭제합니다.\n${entry.bindings
+            .map((b) => `- ${b.sessionName} · 지점 ${b.order} ${b.tagName}`)
+            .join("\n")}${liveWarning(entry.bindings)}`;
+    if (!window.confirm(message)) return;
     await run(async () => {
-      await api(`/api/admin/library/${entry.id}`, { method: "DELETE" });
-      return `${entry.name}: 삭제했습니다.`;
+      const result = await api<{ id: string; detached: number }>(`/api/admin/library/${entry.id}`, { method: "DELETE" });
+      return result.detached > 0
+        ? `${entry.name}: 연결 ${result.detached}곳을 해제하고 삭제했습니다.`
+        : `${entry.name}: 삭제했습니다.`;
+    });
+  }
+
+  // 기능: 연결 하나를 확인 후 해제한다 (고정 URL: 이 지점의 목록 URL 연결, SUN: 이 지점의 등록). 진행 중 세션이면 경고를 붙인다
+  async function detach(entry: LibraryEntry, binding: LibraryBinding) {
+    const effect =
+      entry.kind === "static"
+        ? "이 지점에서 이 고정 URL이 더 이상 인정되지 않고, 고정 QR/URL 허용이 켜져 있으면 지점의 원래 URL·QR이 다시 인정됩니다."
+        : "이 지점의 태그 등록(UID·기준값)이 지워져 미등록이 됩니다. 다시 쓰려면 등록이 필요합니다. 사용된 URL은 계속 무효입니다.";
+    const message = `"${entry.name}" 연결을 해제할까요?\n${binding.sessionName} · 지점 ${binding.order} ${binding.tagName}\n\n${effect}${liveWarning([binding])}`;
+    if (!window.confirm(message)) return;
+    await run(async () => {
+      const result = await api<{ detached: boolean }>(
+        `/api/admin/library/${entry.id}/bindings/${binding.tagId}`,
+        { method: "DELETE" },
+      );
+      return result.detached
+        ? `${entry.name}: ${binding.sessionName} 지점 ${binding.order} ${binding.tagName} 연결을 해제했습니다.`
+        : "이미 연결이 해제되어 있습니다.";
     });
   }
 
@@ -265,16 +299,33 @@ export default function AdminTagsPage() {
                     ) : null}
 
                     <div className="mt-3 text-sm text-paper/70" data-testid={`library-bindings-${entry.id}`}>
-                      {/* 변경: SUN·고정 URL 모두 연결된 세션·지점을 전부 보여 준다 (고정 URL 은 스위치 꺼짐 안내 포함) */}
+                      {/* 변경: 연결 현황(지점 수와 지점별 줄)과 연결별 해제 버튼. SUN 은 기준값, 고정 URL 은 스위치 꺼짐 안내를 함께 보여 준다 */}
                       {entry.bindings.length > 0 ? (
-                        entry.bindings.map((b) => (
-                          <p key={b.tagId}>
-                            {b.sessionName} · {sessionStatusLabel(b.sessionStatus)} · 지점 {b.order} {b.tagName}
-                            {entry.kind === "static" && !b.allowStaticUrl
-                              ? " (이 세션은 고정 URL 허용이 꺼져 있습니다)"
-                              : ""}
-                          </p>
-                        ))
+                        <>
+                          <p className="font-semibold text-paper/85">연결된 지점 {entry.bindings.length}곳</p>
+                          <ul className="mt-2 space-y-2">
+                            {entry.bindings.map((b) => (
+                              <li key={b.tagId} className="flex flex-wrap items-center justify-between gap-2">
+                                <p>
+                                  {b.sessionName} · {sessionStatusLabel(b.sessionStatus)} · 지점 {b.order} {b.tagName}
+                                  {entry.kind === "static" && !b.allowStaticUrl
+                                    ? " (이 세션은 고정 URL 허용이 꺼져 있습니다)"
+                                    : ""}
+                                  {entry.kind === "sun" ? ` · 기준값 ${b.baselineCtr ?? "—"}` : ""}
+                                </p>
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => detach(entry, b)}
+                                  aria-label={`${entry.name} ${b.sessionName} 지점 ${b.order} 연결 해제`}
+                                  className="rounded-full border border-white/15 px-3 py-1 text-xs disabled:opacity-50"
+                                >
+                                  연결 해제
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
                       ) : (
                         <p>연결 안 됨</p>
                       )}

@@ -722,14 +722,36 @@ export const store = {
     }
   },
 
-  // 기능: 목록 태그 삭제 (SUN 은 언제든, 고정 URL 은 어느 지점에도 연결되지 않았을 때만)
-  async deleteLibraryEntry(libraryId: string): Promise<LibraryResult<null>> {
+  // 변경: 목록 태그 삭제. 연결된 지점(고정 URL·SUN 모두)을 한 트랜잭션에서 모두 해제한 뒤 삭제하고 해제한 수를 돌려준다
+  async deleteLibraryEntry(libraryId: string): Promise<LibraryResult<{ detached: number }>> {
     const unavailable = await requireSharedLibrary();
     if (unavailable) return unavailable;
-    const result = await libraryRpc("delete_library_entry", { p_library_id: libraryId });
+    const result = await libraryRpc("delete_library_entry_detach_all", { p_library_id: libraryId });
     if (result.unavailable) return LIBRARY_UNAVAILABLE_RESULT;
     const data = result.data as Row;
-    return data.ok ? { ok: true, value: null } : toLibraryFailure(data);
+    return data.ok ? { ok: true, value: { detached: (data.detached as number) ?? 0 } } : toLibraryFailure(data);
+  },
+
+  // 기능: 목록 태그 연결 하나 해제 (고정 URL: 지점 연결, SUN: 지점의 UID·기준값). 연결돼 있지 않으면 detached=false
+  async detachLibraryBinding(
+    libraryId: string,
+    tagId: string,
+  ): Promise<LibraryResult<{ detached: boolean; kind: "sun" | "static"; sessionId: string; tagId: string }>> {
+    const unavailable = await requireSharedLibrary();
+    if (unavailable) return unavailable;
+    const result = await libraryRpc("detach_library_binding", { p_library_id: libraryId, p_tag_id: tagId });
+    if (result.unavailable) return LIBRARY_UNAVAILABLE_RESULT;
+    const data = result.data as Row;
+    if (!data.ok) return toLibraryFailure(data);
+    return {
+      ok: true,
+      value: {
+        detached: data.detached === true,
+        kind: data.kind as "sun" | "static",
+        sessionId: data.sessionId as string,
+        tagId: data.tagId as string,
+      },
+    };
   },
 
   // 변경: 목록 태그를 지점에 연결 (SUN 은 register_tag_sun 규칙, 고정 URL 은 library_id 연결). 종류는 DB 함수가 구분한다

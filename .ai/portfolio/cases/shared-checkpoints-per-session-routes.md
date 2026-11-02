@@ -1,9 +1,9 @@
 ---
 title: Sharing physical checkpoints across sessions with per-session routes, replacing a one-link-one-checkpoint token swap
-task: TASK-20261102-001 (TODO-001, TODO-002)
+task: TASK-20261102-001 (TODO-001, TODO-002); follow-up TASK-20261102-004 (TODO-001, TODO-002)
 project: nfc-walk-race (CHECKPOINT), a Next.js 16 web app for an NFC walking race
 technologies: Next.js 16 (App Router, route handlers, server components), React 19, TypeScript, Supabase Postgres (plpgsql, savepoints, row locks incl. FOR NO KEY UPDATE, advisory locks, partial unique indexes, CHECK constraints, RLS, grants), PostgREST, NTAG 424 DNA SUN, Playwright (headless Chromium), jsQR, psql
-tags: data-modeling, data-migration, concurrency, row-locks, lock-ordering, deploy-window, capability-probe, api-contract, anti-cheat, participant-data-isolation, independent-review
+tags: data-modeling, data-migration, concurrency, row-locks, lock-ordering, deploy-window, capability-probe, api-contract, anti-cheat, participant-data-isolation, independent-review, stale-request-safety, atomic-detach-and-delete
 updated: 2026-11-02
 ---
 
@@ -133,4 +133,102 @@ Task: TASK-20261102-001. Paths are relative to the Task root `.ai/tasks/archive/
 - Reviews: `reviews/plan-20261102-105407.json`, `reviews/analysis-20261102-110223.json` (CHANGES_REQUIRED, deploy-window blocker B1), `reviews/analysis-20261102-110405.json`, `reviews/TODO-001-20261102-112419.json`, `reviews/TODO-002-20261102-113213.json` (CHANGES_REQUIRED, empty-route blocker B1), `reviews/TODO-002-20261102-113455.json`, `reviews/final-20261102-113826.json` (APPROVED)
 - Source: `supabase/migrations/20261102100000_shared_tag_library.sql`, `src/lib/db.ts`, `src/lib/types.ts`, `src/app/api/admin/sessions/[id]/tags/from-library/route.ts`, `src/app/api/admin/sessions/[id]/tags/order/route.ts`, `src/app/api/admin/sessions/[id]/tags/[tagId]/library/route.ts`, `src/app/api/admin/library/[libraryId]/release/route.ts`, `src/app/t/[token]/page.tsx`, `src/app/t/[token]/admin-static-view.tsx`, `src/app/admin/sessions/[id]/ui.tsx`, `src/app/admin/tags/page.tsx`, `README.md`
 - Related cases: `cases/nfc-tag-library-checkpoint-matching.md` (superseded swap model), `cases/per-session-static-url-switch.md`, `cases/ntag424-sun-anti-cheat.md`
+- Wiki: `.ai/wiki/features/shared-checkpoint-routes.md`
+
+# Follow-up (TASK-20261102-004): seeing, detaching and deleting connections from the tag list
+
+## Problem
+
+Once one library entry could be attached in several sessions, the tag list page (`/admin/tags`) became where admins needed to manage those connections. The user asked for three things (`request.md`): show each tag's connections, detach a connection right there, and delete a tag by first detaching every connection. The existing model blocked parts of this:
+
+- A SUN connection could not be removed at all. A SUN attachment comes from the UID (`upper(tags.uid) = upper(tag_library.uid)`), and no path cleared it.
+- `delete_library_entry` refused a static entry while it was attached (409; the `library_id` FK is NO ACTION). For SUN entries it deleted the row and left the checkpoints registered.
+
+## Constraints
+
+From `plan.md`:
+
+- One new migration (`20261102120000_library_binding_detach.sql`). The nine existing migration files stay byte-identical.
+- Same deploy-window rule as the parent task: a new app on the old schema must get 503, never old semantics.
+- Keep the existing lock order (global `cp-library-binding` advisory lock → `tags` by id → `tag_library`), and do not block participant taps.
+- Keep `sun_counters` and `tag_events`, so used SUN URLs stay invalid and race history is unchanged.
+- Work only on the tag list page. The session NFC tab and participant routes stay unchanged.
+
+## Decisions and Reasoning
+
+- **New function names instead of replacing old ones (plan D4).** The new behavior lives in `detach_library_binding(p_library_id, p_tag_id)` and `delete_library_entry_detach_all(p_library_id)`. If `delete_library_entry` had been replaced in place, a database that had not been migrated yet would keep deleting SUN entries while leaving their checkpoints registered, which contradicts the new confirm text. With new names, the missing function maps to `LIBRARY_UNAVAILABLE` and the existing 503, and every new store write calls `requireSharedLibrary()` first. The old functions stay unchanged because deployed apps may still call them.
+- **Re-checking under lock to handle stale pages (D2).** `/admin/tags` has no Realtime, so a detach can come from an out-of-date page. A detach is keyed by `(libraryId, tagId)`. After taking its locks, the function checks again that the checkpoint is still connected to *this* entry (static: `library_id = entry.id`; SUN: `uid <> '' and upper(uid) = upper(entry.uid)`). If it is not, the function writes nothing and returns `{ok:true, detached:false}`, so a stale click can never remove a different entry's connection. On a checkpoint that has both kinds, each kind is detached independently.
+- **Detaching everything and deleting in one transaction.** The delete function collects the connected `tags` ids once, locks them `FOR NO KEY UPDATE` in id order, then locks the entry and clears exactly that id set (`id = any(v_ids)` plus the same predicate). Last, it deletes the row. The analysis found the reason for collecting ids first: a second `update … where upper(uid)=…` takes a new snapshot and could lock a newly committed row outside id order (`analysis.md`). Doing all of it in one function body means any failure rolls back every detach.
+- **`FOR NO KEY UPDATE` on `tags`.** This applies the parent task's finding. The `tag_events` insert takes an FK `KEY SHARE` lock, which does not conflict with `NO KEY UPDATE`, so a participant tap during an open detach or delete does not wait.
+- **Live sessions get a warning, not a block (D3/D6).** This matches the existing per-checkpoint detach. The confirm dialog names the live sessions and states the effect. After a SUN detach, teams that have not reached that checkpoint get "등록되지 않은 NFC 태그입니다." until it is registered again. After a static detach, the checkpoint's own URL/QR counts again when the session's switch is on.
+
+## Implementation
+
+- **TODO-001 (migration, store, API):**
+  - the two functions above, both `security invoker` with `search_path=public` and EXECUTE only for `service_role`
+  - a static detach clears `library_id`; a SUN detach sets `uid = ''` and both baselines to null
+  - `db.ts`: `detachLibraryBinding` and `deleteLibraryEntry`, which now returns `{detached}`
+  - new `DELETE /api/admin/library/[libraryId]/bindings/[tagId]`; `DELETE /api/admin/library/[libraryId]` now detaches everything, deletes, and returns `{id, detached}`
+  - both routes run `configGuard()` → `isAdmin()`
+- **TODO-002 (UI, README):**
+  - each entry on `/admin/tags` shows "연결된 지점 N곳" with one row per connection (session, status, checkpoint)
+  - each row has its own "연결 해제" button, with a confirm text that depends on the kind and adds the live-session warning
+  - a stale click shows "이미 연결이 해제되어 있습니다."
+  - deleting a connected entry first shows a confirm that lists every connection, then reports the server's count
+  - the README documents the effects and the third migration in the apply order
+
+## Validation
+
+All figures come from Task artifacts, final regression on the local stack:
+
+- **Static gate:** `./scripts/validate.sh TASK-20261102-004 FINAL` passed (`LINT_BASELINE=MATCH`, `TSC_EXIT=0`). `npm run test:sun` passed 11/0.
+- **API/SQL check:** `SUMMARY pass=66 fail=0`. It covered:
+  - the deploy window: before the migration, both routes return 503 and the data is unchanged
+  - the script applying the migration itself
+  - per-connection detach of both kinds in a live session
+  - stale and mismatched calls, plus 404s
+  - connected deletes returning `{detached:2}` with `sun_counters`/`tag_events` unchanged
+  - a forced failure at the delete step, which rolled back every detach
+  - Realtime messages for each affected session
+  - privileges (anon/authenticated 42501) and 401 without login
+  - concurrency: taps during an open detach or delete finish before it commits, no 40P01, 5 concurrent detaches give exactly one `detached:true`, 3 concurrent deletes give one 200 and two 404s
+  - a participant payload leak scan
+  - regressions on the old functions
+- **Browser checks (headless Chromium):**
+  - TODO-001 delete flow: 15/0
+  - TODO-002 connection list, detach and delete UI: 32/0, rerun in the final regression with four screenshots
+  - TODO-001 flow rerun as a regression under TODO-002: 15/0
+- **Migration immutability:** the nine existing files are byte-identical (sha256 before and after).
+- **Independent review (Codex):**
+  - PLAN_REVIEW and ANALYSIS_REVIEW: approved in one round each.
+  - TODO-001: round 1 CHANGES_REQUIRED. The blocker was that browser validation had been marked NOT_APPLICABLE for a DB/API Todo, even though the existing "삭제" button on `/admin/tags` now succeeds for connected entries and detaches their checkpoints. That is a visible behavior change. A browser check of that flow was added (15/0) without any product code change, and round 2 was approved.
+  - TODO-002: approved in one round.
+  - FINAL_REVIEW: approved with no blockers or warnings.
+
+## Result and Limits
+
+- Admins can see every connection of a library entry and detach any one of them from the tag list. Deleting a connected entry detaches all its connections and deletes it atomically. The kinds behave as follows:
+  - SUN: the checkpoint becomes unregistered, and its used counters stay used.
+  - static: the library URL stops counting, and the checkpoint's own URL counts again.
+- **Not done:** the migration has **not** been applied to hosted, so these two actions return the DB-update 503 there until the user applies it. All validation ran on the local stack.
+- Known limitations: `/admin/tags` has no Realtime, and its live warning uses the session status from the last load. The server re-check protects against stale detaches.
+
+## Engineering Takeaway and Talking Points
+
+- **Deploy-window safety through naming:** I added new function names instead of using `create or replace`, so a database that had not been migrated returns 503 instead of quietly using the old delete semantics.
+- **Stale-request safety:** the detach re-checks "still connected to this entry" under lock, and it is idempotent, so an out-of-date admin page cannot remove the wrong connection.
+- **Lock-order discipline in set updates:** the delete collects ids once and updates by id. A second predicate-based update could take a new snapshot and lock rows out of order.
+- **Reading validation rules carefully:** the reviewer pointed out that a backend-only change to an endpoint still changed what an existing button does, so it needed browser validation, and I added it.
+
+## Evidence (follow-up)
+
+Task: TASK-20261102-004. Paths are relative to `.ai/tasks/archive/TASK-20261102-004/`.
+
+- `request.md`, `plan.md` (D2 re-verification, D3 atomic delete, D4 new names, D6 live warning), `analysis.md` (deadlock and out-of-order lock analysis)
+- `implementation/TODO-001.md` (review round 1 fix), `implementation/TODO-002.md`
+- Final regression: `runtime/web/FINAL/report.md`, `runtime/web/FINAL/api-check.out.txt` (`SUMMARY pass=66 fail=0`), `runtime/web/FINAL/todo002/browser-check.out.txt` (32/0), `runtime/web/FINAL/test-sun.out.txt` (11/0), `runtime/web/FINAL/migrations-sha256-before.txt` / `-after.txt`
+- TODO-001 browser check: `runtime/web/TODO-001/report.md` (15/0)
+- Static gate: `runtime/static/FINAL/summary.txt`
+- Reviews: `reviews/plan-20261102-125255.json`, `reviews/analysis-20261102-130032.json`, `reviews/TODO-001-20261102-130834.json` (CHANGES_REQUIRED, B1 browser validation), `reviews/TODO-001-20261102-131130.json`, `reviews/TODO-002-20261102-131652.json`, `reviews/final-20261102-131923.json` (APPROVED)
+- Source: `supabase/migrations/20261102120000_library_binding_detach.sql`, `src/lib/db.ts`, `src/app/api/admin/library/[libraryId]/bindings/[tagId]/route.ts`, `src/app/api/admin/library/[libraryId]/route.ts`, `src/app/admin/tags/page.tsx`, `README.md`
 - Wiki: `.ai/wiki/features/shared-checkpoint-routes.md`

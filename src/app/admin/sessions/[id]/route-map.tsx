@@ -77,7 +77,7 @@ function smoothPath(points: Pt[], closed = false): string {
 }
 
 // 기능: 한 바퀴 조금 넘게 겹쳐 그린 손그림 동그라미 (반지름이 천천히 출렁이고 끝이 살짝 삐져나온다)
-function wobblyLoop(cx: number, cy: number, r: number, seed: string, turns = 1.14): string {
+function wobblyLoop(cx: number, cy: number, r: number, seed: string, turns = 1.14, amp = 1): string {
   const rand = rng(seed);
   const start = rand() * Math.PI * 2;
   const phaseA = rand() * Math.PI * 2;
@@ -89,7 +89,8 @@ function wobblyLoop(cx: number, cy: number, r: number, seed: string, turns = 1.1
     const a = start + t * Math.PI * 2 * turns;
     // 변경: 겹쳐 지나가는 끝부분은 반지름을 조금 키워 두 줄이 어긋나 보이게 한다
     const drift = t > 0.85 ? (t - 0.85) * 14 : 0;
-    const rr = r + Math.sin(a * 2 + phaseA) * 1.6 + Math.sin(a * 3 + phaseB) * 1.1 + drift + (rand() - 0.5) * 1.2;
+    // 변경: amp 로 흔들림 크기를 줄여 작은 미니 노드도 동그랗게 보이게 한다 (전체 지도는 1)
+    const rr = r + (Math.sin(a * 2 + phaseA) * 1.6 + Math.sin(a * 3 + phaseB) * 1.1 + drift + (rand() - 0.5) * 1.2) * amp;
     pts.push({ x: cx + Math.cos(a) * rr, y: cy + Math.sin(a) * rr * 0.97 });
   }
   return smoothPath(pts);
@@ -524,7 +525,7 @@ export function RouteMap({ tags }: { tags: RouteMapTag[] }) {
   );
 }
 
-const MINI_GAP = 78;
+const MINI_GAP = 88;
 const MINI_PAD = 26;
 const MINI_Y = 21;
 
@@ -563,7 +564,7 @@ function MiniRouteMap({
         r: item.kind === "checkpoint" ? 13 : 16,
         x: MINI_PAD + k * MINI_GAP,
         y: MINI_Y + (rand() - 0.5) * 3,
-        label: truncateName(item.name, 11),
+        label: truncateName(item.name, 13),
       };
     });
   }, [tags]);
@@ -591,7 +592,7 @@ function MiniRouteMap({
               {/* 기능: 미니 지도용 크레파스 질감 (작은 크기에 맞춰 흔들림을 줄인다) */}
               <filter id={`crayon-mini-${uid}`} filterUnits="userSpaceOnUse" x={-20} y={-20} width={width + 40} height={height + 40}>
                 <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="4" result="warp" />
-                <feDisplacementMap in="SourceGraphic" in2="warp" scale="2" xChannelSelector="R" yChannelSelector="G" result="wobbled" />
+                <feDisplacementMap in="SourceGraphic" in2="warp" scale="1.4" xChannelSelector="R" yChannelSelector="G" result="wobbled" />
                 <feTurbulence type="fractalNoise" baseFrequency="1.3" numOctaves="2" seed="9" result="grain" />
                 <feColorMatrix in="grain" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  4.4 0 0 0 -1.05" result="grainMask" />
                 <feComposite in="wobbled" in2="grainMask" operator="in" />
@@ -626,7 +627,7 @@ function MiniRouteMap({
                   <g className="crayon-pop" style={{ animationDelay: `${node.order * 0.07}s`, animationDuration: "0.3s" }}>
                     <g fill="none" strokeLinecap="round" strokeLinejoin="round" filter={filter}>
                       <path d={scribbleFill(0, 0, node.r - 1, `mfill:${node.key}`, -30, 3.6)} stroke={node.crayon.fill} strokeWidth={4} />
-                      <path d={wobblyLoop(0, 0, node.r, `mring:${node.key}`)} stroke={node.crayon.stroke} strokeWidth={2.4} />
+                      <path d={wobblyLoop(0, 0, node.r, `mring:${node.key}`, 1.1, 0.45)} stroke={node.crayon.stroke} strokeWidth={2.4} />
                     </g>
                     <text
                       textAnchor="middle"

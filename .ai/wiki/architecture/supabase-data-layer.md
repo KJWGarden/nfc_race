@@ -15,6 +15,7 @@ related_files:
   - supabase/migrations/20260928100000_static_tag_switch.sql
   - supabase/migrations/20261028100000_tag_library.sql
   - supabase/migrations/20261102100000_shared_tag_library.sql
+  - supabase/migrations/20261102120000_library_binding_detach.sql
   - supabase/seed.sql
   - supabase/config.toml
 updated: 2026-11-02
@@ -54,9 +55,9 @@ This layer replaced the `data/db.json` store, which relied on one in-process pro
   - `tags_session_library_key (session_id, library_id) where library_id is not null` (one checkpoint per session per static entry).
   - On a generated-code collision (session code, join code, tag token, library token), the app retries with a new code up to 5 times.
 - **Token-uniqueness trigger `tags_token_guard`** (`BEFORE INSERT OR UPDATE OF token, original_token ON tags`): keeps every token value unique across `tags.token`, `tags.original_token` and `tag_library.token`. Since TASK-20261102-001 no `tags.token` may equal a library token at all (no bound exception remains). It takes per-token `pg_advisory_xact_lock(hashtext('cp-token:'||lower(token)))` for both values in ascending hash order and raises `unique_violation`, which `create_tag` already maps to `{retry:true}`. Any new writer of `tags.token` goes through it.
-- **Atomic functions:** `record_sun_tag`, `record_static_tag` (TASK-20260928-001), `register_tag_sun`, `create_team`, `join_team`, `create_announcement`, `create_tag`, `admin_login_attempt`, `admin_login_success`, `rejoin_lookup`, and the tag library functions (TASK-20261028-001): `upsert_library_sun`, `issue_library_static`, `match_library` (dispatcher; SUN calls `register_tag_sun`), `match_library_static`, `release_library_static`, `delete_library_entry`; and (TASK-20261102-001) `detach_library_tag`, `add_tag_from_library`, `reorder_session_tags`, plus read-only `resolve_static_token` and the capability probe `shared_library_schema()`.
+- **Atomic functions:** `record_sun_tag`, `record_static_tag` (TASK-20260928-001), `register_tag_sun`, `create_team`, `join_team`, `create_announcement`, `create_tag`, `admin_login_attempt`, `admin_login_success`, `rejoin_lookup`, and the tag library functions (TASK-20261028-001): `upsert_library_sun`, `issue_library_static`, `match_library` (dispatcher; SUN calls `register_tag_sun`), `match_library_static`, `release_library_static`, `delete_library_entry`; and (TASK-20261102-001) `detach_library_tag`, `add_tag_from_library`, `reorder_session_tags`, plus read-only `resolve_static_token` and the capability probe `shared_library_schema()`; and (TASK-20261102-004) `detach_library_binding` (one connection of either kind: static clears `library_id`, SUN clears `uid`/baseline; re-verified under lock, `detached:false` when no longer connected) and `delete_library_entry_detach_all` (detach every connection, then delete, one transaction). The old `delete_library_entry` remains but the app no longer calls it. See `features/shared-checkpoint-routes.md`.
   - They lock the relevant row (`for update`, usually the team row) so concurrent requests from one team serialize.
-  - Library binding and route functions use a fixed lock order: global advisory lock `cp-library-binding` → `sessions` row (only where needed) → `tags` rows by `id` → `tag_library` rows by `id` → per-token advisory locks in the trigger. It matches `create_tag` and the delete cascade order, which avoids deadlocks.
+  - Library binding and route functions use a fixed lock order: global advisory lock `cp-library-binding` → `sessions` row (only where needed) → `tags` rows by `id` → `tag_library` rows by `id` → per-token advisory locks in the trigger. It matches `create_tag` and the delete cascade order, which avoids deadlocks. The TASK-20261102-004 functions take no `sessions` lock: advisory → `tags FOR NO KEY UPDATE` (delete collects ids in id order and updates only that set) → `tag_library` (`FOR SHARE` for detach, `FOR UPDATE` for delete).
   - **Use `FOR NO KEY UPDATE`, not `FOR UPDATE`, when locking `sessions`/`tags` rows whose key is not changed.** A `tag_events` insert takes FK `FOR KEY SHARE` on its `sessions` and `tags` rows; `FOR UPDATE` conflicts with that, so a participant tap waited behind an admin reorder in TASK-20261102-001 testing. Binding/route functions now lock `tags` and (reorder) `sessions` with `FOR NO KEY UPDATE`. `create_tag` and `add_tag_from_library` still take `sessions FOR UPDATE`.
   - They return Korean user-facing messages identical to the old JS validation.
 - **Whole-view reads**
@@ -105,7 +106,7 @@ This layer replaced the `data/db.json` store, which relied on one in-process pro
 
 - `src/lib/db.ts` (`store`, `check()` RPC helper, row mappers, `FUNCTION_NOT_FOUND`, `LIBRARY_UNAVAILABLE` + `libraryRpc` + `requireSharedLibrary()` for the library deploy window)
 - `src/lib/supabase-server.ts`
-- `supabase/migrations/*.sql` (nine files, applied in file-name order; the ninth is `20261102100000_shared_tag_library.sql`)
+- `supabase/migrations/*.sql` (ten files, applied in file-name order; the ninth is `20261102100000_shared_tag_library.sql`, the tenth `20261102120000_library_binding_detach.sql`)
 - `supabase/seed.sql`, `supabase/config.toml`
 
 # Validation
@@ -120,6 +121,7 @@ This layer replaced the `data/db.json` store, which relied on one in-process pro
 - After build, the service key and other server secrets had 0 hits in `.next/static`.
 - TASK-20261028-001: catalog checks for `tag_library` (RLS on, 0 policies, anon 42501, EXECUTE only for service_role), trigger and `create_tag` retry cases, and deterministic two-connection checks of the advisory-lock interleavings (no deadlock) passed locally (`.ai/tasks/archive/TASK-20261028-001/runtime/web/FINAL/api-check.out.txt`, 146/146).
 - TASK-20261102-001: catalog checks for the new/replaced functions (anon 42501, EXECUTE only for service_role), the swapped-binding data migration, two-connection concurrency checks (no deadlock; taps do not wait on attach/reorder locks) and invariants passed locally (`.ai/tasks/archive/TASK-20261102-001/runtime/web/FINAL/api-check.out.txt`, 162/162).
+- TASK-20261102-004: privileges of the two new functions (anon/authenticated denied, `security invoker`, `search_path=public`), forced-failure rollback of delete-all, taps not waiting during detach/delete, no 40P01, and concurrent detach (exactly one `detached:true`) / delete (one 200, others 404) passed locally (`.ai/tasks/archive/TASK-20261102-004/runtime/web/FINAL/api-check.out.txt`, 66/66).
 
 # Future Considerations
 
@@ -132,3 +134,4 @@ This layer replaced the `data/db.json` store, which relied on one in-process pro
 - TASK-20260928-001 (`allow_static_url`, `record_static_tag`, `getStaticTagInfo`)
 - TASK-20261028-001 (`tag_library`, `tags.original_token`, `tags_token_guard`, library functions)
 - TASK-20261102-001 (`tags.library_id`, route functions, `resolve_static_token`, `shared_library_schema`, NO KEY UPDATE lock finding)
+- TASK-20261102-004 (`detach_library_binding`, `delete_library_entry_detach_all`)
